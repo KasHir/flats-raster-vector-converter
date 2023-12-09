@@ -127,30 +127,6 @@ def combine_edges(graph):
         else:
              print(f"エッジが存在しません: {edge1}, {edge2}")
 
-    def count_nodes(edge1, edge2):
-        # 2つエッジのノード数を返す
-        # return len(set(edge1[:2] + edge2[:2])) # 遅い?
-        """
-        2つのエッジに含まれるユニークなノードの数をカウントします。
-        """
-        unique_nodes = set()
-        for node in edge1[:2]:
-            unique_nodes.add(node)
-        for node in edge2[:2]:
-            unique_nodes.add(node)
-        
-        return len(unique_nodes)
-            
-        
-    
-    def is_mergeable(edge1, edge2):
-        # 両方のエッジが同じノードを共有しているか判断
-        return  count_nodes(edge1, edge2) <= 2 # 同じノードを共有していれば2以下になる
-
-    def is_connectable(edge1, edge2):
-        # いずれかのnodeを共有（node数が2以下はcheck済）
-        return edge1[0] == edge2[0] or edge1[0] == edge2[1] or edge1[1] == edge2[0] or edge1[1] == edge2[1]
-
     # 各ノードから出発するエッジを格納する辞書を作成
     def create_edges_reverse_dict(graph):
         edges_dict = {}
