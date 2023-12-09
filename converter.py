@@ -483,46 +483,24 @@ def generate_svg(graph, route, file_name, invalid_path=False):
 
             pt_s = graph.nodes[start_node]['o'].tolist()
             for g in graph[start_node][start_node].values():
-                draw_points = [pt_s] + g['pts'].tolist() + [pt_s]
-                add_polyline_to_dwg(dwg, draw_points, stroke_color)
-        else:
-            draw_flag = False
-            invalid_start_node = last_end_node
-
-        if (start_node, start_node) in graph.edges():
-            print(f"{start_node}, {start_node} exists")
-            draw_flag = True
-            latt_start_node = start_node
-            last_end_node = start_node
-
-            pt_s = graph.nodes[start_node]['o'].tolist()
-            pt_e = graph.nodes[start_node]['o'].tolist()
-            stroke_color = 'black'
-
-            for g in graph[start_node][start_node].values():
                 draw_points = g['pts'].tolist()
-                draw_points = [pt_s] + draw_points + [pt_e]
-                
-                # ポリゴンラインで生成する場合
                 add_polyline_to_dwg(dwg, draw_points, stroke_color)
-                #print(f"draw: {start_node}, {end_node}")
         else:
             draw_flag = False
             invalid_start_node = last_end_node
 
-        if (start_node, end_node) in graph.edges():
+        if edge_exists:
             print(f"{start_node}, {end_node} exists")
             draw_flag = True
-            latt_start_node = start_node
+            last_start_node = start_node
             last_end_node = end_node
 
             pt_s = graph.nodes[start_node]['o'].tolist()
             pt_e = graph.nodes[end_node]['o'].tolist()
-            stroke_color = 'black' if start_node != end_node else 'red'
+            stroke_color = 'black'
 
             for g in graph[start_node][end_node].values():
                 draw_points = g['pts'].tolist()
-                draw_points = [pt_s] + draw_points + [pt_e]
                 
                 # ポリゴンラインで生成する場合
                 add_polyline_to_dwg(dwg, draw_points, stroke_color)
@@ -533,18 +511,16 @@ def generate_svg(graph, route, file_name, invalid_path=False):
             invalid_start_node = last_end_node
         
         if invalid_path and draw_flag:
-            #draw_flag = False
+            draw_flag = False
             
-            #print(f"{invalid_start_node}, {latt_start_node} : Z up path between edge and edge")
-
             pt_s = graph.nodes[invalid_start_node]['o'].tolist()
-            pt_e = graph.nodes[latt_start_node]['o'].tolist()
+            pt_e = graph.nodes[last_start_node]['o'].tolist()
             
             draw_points = [pt_s] + [pt_e]
             
             # ポリゴンラインで生成する場合
             add_polyline_to_dwg(dwg, draw_points, 'gray', stroke_width=0.5)
-            #print(f"invalid: {invalid_start_node}, {latt_start_node}")
+            #print(f"invalid: {invalid_start_node}, {last_start_node}")
     dwg.save()
     print(f"saved: {file_name}")
     del dwg
