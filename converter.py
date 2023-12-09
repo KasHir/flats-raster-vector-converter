@@ -3,7 +3,6 @@ import sys
 
 import cv2
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
 import svgwrite
@@ -16,7 +15,6 @@ sys.path.insert(0, './external/sknw')
 import sknw
 
 import time
-#import cProfile
 
 def process_image(file_path, save_dir):
     # 画像をOpenCVで読み込む
@@ -65,7 +63,8 @@ def combine_edges(graph):
     def merge_edges(graph, edge1, edge2, reverse_first=False, reverse_second=False):
         """
         2つのエッジを結合し、新しいエッジを作成する関数。
-        必要に応じてエッジの順序を逆転させる。
+        NetworkXのMultiGraphのedgeに含まれる座標群はptsとして格納されている
+        必要に応じてエッジ（始点終点に応じて座標軍の並び）の順序を逆転させる。
         """
         if edge1 in graph.edges(keys=True) and edge2 in graph.edges(keys=True):# エッジがグラフに存在するか確認
             #print(f"merge: {edge1}, {edge2}")
@@ -76,14 +75,12 @@ def combine_edges(graph):
             if reverse_first:
                 pts1 = np.flip(pts1, axis=0)
                 start_node_1, end_node_1 = edge1[1], edge1[0]
-                #print("reverse_1st-----------------------")
             else:
                 start_node_1, end_node_1 = edge1[:2]
     
             if reverse_second:
                 pts2 = np.flip(pts2, axis=0)
                 start_node_2, end_node_2 = edge2[1], edge2[0]
-                #print("reverse_2nd")
             else:
                 start_node_2, end_node_2 = edge2[:2]
     
@@ -117,9 +114,10 @@ def combine_edges(graph):
             # 元のエッジを削除し、新しいエッジを追加
             graph.remove_edge(edge1[0], edge1[1], key=edge1[2])
             graph.remove_edge(edge2[0], edge2[1], key=edge2[2])
+
             new_key = graph.new_edge_key(start_node_1, end_node_2)
-            #graph.add_edge(start_node_1, end_node_2, key=edge1[2], pts=new_pts)
             graph.add_edge(start_node_1, end_node_2, new_key, pts=new_pts)
+
             print(f"merged:({edge1[0]}, {edge1[1]}) , ({edge2[0]}, {edge2[1]}) -> {start_node_1}, {end_node_2}")
 
             #DEBUG_NO = str(edge1[0]) +','+ str(edge1[1]) +','+ str(edge2[0]) + ','+ str(edge2[1])
@@ -127,7 +125,7 @@ def combine_edges(graph):
         else:
              print(f"エッジが存在しません: {edge1}, {edge2}")
 
-    # 各ノードから出発するエッジを格納する辞書を作成
+    # 各ノードから出発するエッジを格納する辞書を作成．探索効率化のため
     def create_edges_reverse_dict(graph):
         edges_dict = {}
         edges_reverse_dict = {}
@@ -137,34 +135,33 @@ def combine_edges(graph):
             edges_reverse_dict.setdefault(end_node, []).append(edge)
 
         return edges_dict, edges_reverse_dict
-                
+    
+    # 結合可能なエッジの探索
     def process_edges(graph):
         #start_time = time.time() # for benchmark
         
         changes_made = True
-        # 全エッジのリストを取得
+
+        # 各ノードにつながるエッジのリストを辞書として登録
         edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
         #print(f"edges_dict: {edges_dict}")
         
         while changes_made:
             changes_made = False  # このループでの変更がないと仮定
             
-            #for node, edges_list in edges_dict.items():
-            # 各ノードから出発するエッジ間で結合を試みる
-            #print("join loop edge if exists ===============================")
-
+            # 各ノードから出発するエッジが登録した辞書を用いて探索，エッジを結合
+            # 始点と終点が同じノードになるエッジ（self_loop）がなくなるまで優先して結合
             for node, edges_list in edges_dict.items():
                 #print(f"node:{node}, {edges_list}")
                 
                 for edge1 in edges_list:
-                    #node_edge1end = edge1[1]
                     #print(f"edge1: {edge1}; ({node},{node_edge1end})")
                     
                     for edge2 in (edges_dict[node] + edges_reverse_dict.get(node, [])):
                         #print(f"edge1: {edge1}, edge2: {edge2}")
                         
-                        e1s = edge1[0]
-                        e1e = edge1[1]
+                        e1s = edge1[0] # start node of edge1
+                        e1e = edge1[1] #   end node of edge1
                         e2s = edge2[0]
                         e2e = edge2[1]
 
@@ -199,7 +196,7 @@ def combine_edges(graph):
                 if changes_made:
                     break
         
-          
+            # 優先対象（self_loopのエッジ）がなかったら，独立したedge1とedge2の中から結合可能な組み合わせを探索
             if not changes_made:
                 
                 for node, edges_list in edges_dict.items():
@@ -210,7 +207,9 @@ def combine_edges(graph):
                         #print(f"edge1: {edge1}; ({node},{node_edge1end})")
 
 
-                        for edge2 in (edges_dict[node] + edges_reverse_dict.get(node, []) + edges_dict.get(node_edge1end, [])
+                        for edge2 in (edges_dict[node]
+                                       + edges_reverse_dict.get(node, [])
+                                       + edges_dict.get(node_edge1end, [])
                                        + edges_reverse_dict.get(node_edge1end, [])):
                             #print(f"edge2: {edge2}")
                             
@@ -275,7 +274,7 @@ def number_of_isolates(graph):
 
 
 def remove_isolates(graph):
-    remove_isolates_graph = nx.MultiGraph(graph)  # マルチグラフのコピーを作成
+    remove_isolates_graph = nx.MultiGraph(graph)
     isolates = [node for node in remove_isolates_graph.nodes() if remove_isolates_graph.degree(node) == 0]
     for node in isolates:
         remove_isolates_graph.remove_node(node)
@@ -310,7 +309,7 @@ def create_distance_matrix(graph):
 
 # 2. OR-Toolsを使用して最短ルートを計算
 def calculate_optimized_route(distance_matrix, graph):
-    start_node=list(graph.nodes())[0] # graphの中にあるいずれかのnodeを始点とする
+    start_node = list(graph.nodes())[0] # graphの中にあるいずれかのnodeを始点とする
     print(f"start_node: {start_node}")
     
     # ノードの数を取得
@@ -322,7 +321,6 @@ def calculate_optimized_route(distance_matrix, graph):
 
     
     def distance_callback(from_index, to_index):
-        #print("distance_callback")
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
 
@@ -332,7 +330,7 @@ def calculate_optimized_route(distance_matrix, graph):
         # デバッグ情報の出力
         #print(f"Distance from node {from_node} to node {to_node}: {distance}")
         
-        return distance #distance_matrix[from_node][to_node]
+        return distance
 
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
@@ -406,9 +404,6 @@ def draw_graph(graph, colors, save_dir, img_size, save_name):#, img_size):
     for s, e in graph.edges():
         current_color = colors[color_index % len(colors)]
         
-        pt_s = graph.nodes[s]['o'].tolist()
-        pt_e = graph.nodes[e]['o'].tolist()
-
         for edge_key, edge_data in graph[s][e].items():
             pts = edge_data['pts'].tolist()
             pt_all = pts
@@ -434,9 +429,7 @@ def draw_svg(graph, colors, save_dir, save_name):
     color_index = 0
 
     for s, e in graph.edges():
-        #pt_s = graph.nodes[s]['o'].tolist()
-        #pt_e = graph.nodes[e]['o'].tolist()
-        #print(f"{s}, {e}, {pt_s}, {pt_e}")
+
         for edge_key, edge_data in graph[s][e].items():
             pts = edge_data['pts'].tolist()
             current_color = colors[color_index % len(colors)]
@@ -465,7 +458,7 @@ def add_polyline_to_dwg(dwg, points, stroke_color, stroke_width=1, fill_color='n
         stroke=stroke_color,
         stroke_width=stroke_width,
         fill=fill_color,
-        id='id_'  # + '{0:03}'.format(num),
+        id='id_'
     ))
     
 def generate_svg(graph, route, file_name, invalid_path=False):
@@ -492,6 +485,9 @@ def generate_svg(graph, route, file_name, invalid_path=False):
             for g in graph[start_node][start_node].values():
                 draw_points = [pt_s] + g['pts'].tolist() + [pt_s]
                 add_polyline_to_dwg(dwg, draw_points, stroke_color)
+        else:
+            draw_flag = False
+            invalid_start_node = last_end_node
 
         if (start_node, start_node) in graph.edges():
             print(f"{start_node}, {start_node} exists")
