@@ -492,7 +492,7 @@ def generate_svg(graph, route, file_name, invalid_path=False):
         if (start_node, start_node) in graph.edges():
             print(f"{start_node}, {start_node} exists")
             draw_flag = True
-            lsat_start_node = start_node
+            latt_start_node = start_node
             last_end_node = start_node
 
             pt_s = graph.nodes[start_node]['o'].tolist()
@@ -513,7 +513,7 @@ def generate_svg(graph, route, file_name, invalid_path=False):
         if (start_node, end_node) in graph.edges():
             print(f"{start_node}, {end_node} exists")
             draw_flag = True
-            lsat_start_node = start_node
+            latt_start_node = start_node
             last_end_node = end_node
 
             pt_s = graph.nodes[start_node]['o'].tolist()
@@ -535,16 +535,16 @@ def generate_svg(graph, route, file_name, invalid_path=False):
         if invalid_path and draw_flag:
             #draw_flag = False
             
-            #print(f"{invalid_start_node}, {lsat_start_node} : Z up path between edge and edge")
+            #print(f"{invalid_start_node}, {latt_start_node} : Z up path between edge and edge")
 
             pt_s = graph.nodes[invalid_start_node]['o'].tolist()
-            pt_e = graph.nodes[lsat_start_node]['o'].tolist()
+            pt_e = graph.nodes[latt_start_node]['o'].tolist()
             
             draw_points = [pt_s] + [pt_e]
             
             # ポリゴンラインで生成する場合
             add_polyline_to_dwg(dwg, draw_points, 'gray', stroke_width=0.5)
-            #print(f"invalid: {invalid_start_node}, {lsat_start_node}")
+            #print(f"invalid: {invalid_start_node}, {latt_start_node}")
     dwg.save()
     print(f"saved: {file_name}")
     del dwg
