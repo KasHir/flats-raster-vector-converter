@@ -1,20 +1,21 @@
+# Standard library imports
 import os
 import sys
+import time
 
+# Third-party imports
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
-import svgwrite
-from skimage.morphology import skeletonize
-
+import numpy as np
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+from skimage.morphology import skeletonize
+import svgwrite
 
-# ローカルライブラリのインポート
+# Local application/library specific imports
 sys.path.insert(0, './external/sknw')
 import sknw
 
-import time
 
 def process_image(file_path, save_dir):
     # 画像をOpenCVで読み込む
