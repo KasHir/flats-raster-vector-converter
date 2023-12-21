@@ -126,18 +126,29 @@ def combine_edges(graph):
             #draw_graph(graph, colors, save_dir2, img_size, save_name=filename+DEBUG_NO)
         else:
              print(f"エッジが存在しません: {edge1}, {edge2}")
+    
+    def create_edge_mappings(graph: nx.MultiGraph) -> (dict, dict):
+        """
+        Create two dictionaries to map nodes to their outgoing and incoming edges.
 
-    # 各ノードから出発するエッジを格納する辞書を作成．探索効率化のため
-    def create_edges_reverse_dict(graph):
-        edges_dict = {}
-        edges_reverse_dict = {}
+        Args:
+            graph (nx.MultiGraph): The MultiGraph from which to create edge mappings.
+
+        Returns:
+            tuple of two dicts: The first dictionary (outgoing_edges_dict) maps each node to its outgoing edges,
+                                and the second dictionary (incoming_edges_dict) maps each node to its incoming edges.
+        """
+        
+        outgoing_edges_dict = {}
+        incoming_edges_dict = {}
         for edge in graph.edges(keys=True):
             start_node, end_node = edge[:2]
-            edges_dict.setdefault(start_node, []).append(edge)
-            edges_reverse_dict.setdefault(end_node, []).append(edge)
+            outgoing_edges_dict.setdefault(start_node, []).append(edge)
+            incoming_edges_dict.setdefault(end_node, []).append(edge)
+        
+        return outgoing_edges_dict, incoming_edges_dict
 
-        return edges_dict, edges_reverse_dict
-    
+
     # 結合可能なエッジの探索
     def process_edges(graph):
         #start_time = time.time() # for benchmark
@@ -145,7 +156,7 @@ def combine_edges(graph):
         changes_made = True
 
         # 各ノードにつながるエッジのリストを辞書として登録
-        edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
+        outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
         #print(f"edges_dict: {edges_dict}")
         
         while changes_made:
@@ -153,13 +164,13 @@ def combine_edges(graph):
             
             # 各ノードから出発するエッジが登録した辞書を用いて探索，エッジを結合
             # 始点と終点が同じノードになるエッジ（self_loop）がなくなるまで優先して結合
-            for node, edges_list in edges_dict.items():
+            for node, edges_list in outgoing_edges_dict.items():
                 #print(f"node:{node}, {edges_list}")
                 
                 for edge1 in edges_list:
                     #print(f"edge1: {edge1}; ({node},{node_edge1end})")
                     
-                    for edge2 in (edges_dict[node] + edges_reverse_dict.get(node, [])):
+                    for edge2 in (outgoing_edges_dict[node] + incoming_edges_dict.get(node, [])):
                         #print(f"edge1: {edge1}, edge2: {edge2}")
                         
                         e1s = edge1[0] # start node of edge1
@@ -192,7 +203,7 @@ def combine_edges(graph):
                                 break
                             
                     if changes_made:
-                        edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
+                        outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
                         break
         
                 if changes_made:
@@ -201,7 +212,7 @@ def combine_edges(graph):
             # 優先対象（self_loopのエッジ）がなかったら，独立したedge1とedge2の中から結合可能な組み合わせを探索
             if not changes_made:
                 
-                for node, edges_list in edges_dict.items():
+                for node, edges_list in outgoing_edges_dict.items():
                     #print(f"node:{node}, {edges_list}")
                     
                     for edge1 in edges_list:
@@ -209,10 +220,10 @@ def combine_edges(graph):
                         #print(f"edge1: {edge1}; ({node},{node_edge1end})")
 
 
-                        for edge2 in (edges_dict[node]
-                                       + edges_reverse_dict.get(node, [])
-                                       + edges_dict.get(node_edge1end, [])
-                                       + edges_reverse_dict.get(node_edge1end, [])):
+                        for edge2 in (outgoing_edges_dict[node]
+                                       + incoming_edges_dict.get(node, [])
+                                       + outgoing_edges_dict.get(node_edge1end, [])
+                                       + incoming_edges_dict.get(node_edge1end, [])):
                             #print(f"edge2: {edge2}")
                             
                             e1s = edge1[0]
@@ -246,7 +257,7 @@ def combine_edges(graph):
                                 break
                                 
                         if changes_made:
-                            edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
+                            outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
                             break
             
                     if changes_made:
@@ -254,7 +265,7 @@ def combine_edges(graph):
 
             # エッジの結合または接続が行われた場合、関連するエッジを更新
             if changes_made:
-                edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
+                outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
             
             # for benchmark
             #end_time = time.time()
@@ -535,7 +546,7 @@ def main():
     colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'black']
 
     # Set file names and paths
-    image_name = 'irasutoya'
+    image_name = 'zunda'
     input_file_path = f"./img_line/{image_name}.png"
     output_dir = "./out/"
 
