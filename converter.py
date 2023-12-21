@@ -17,36 +17,45 @@ sys.path.insert(0, './external/sknw')
 import sknw
 
 
-def process_image(file_path, save_dir):
-    # 画像をOpenCVで読み込む
-    img = cv2.imread(file_path)
+def process_image(
+        input_file_path: str, output_dir: str,
+        )-> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
+    """
+    Processes an image by converting it to grayscale, flipping, rotating, thresholding, and skeletonizing.
+    Args:
+        input_file_path (str): Path to the input image file.
+        output_dir (str): Directory to save the processed image.
 
-    # 画像サイズを取得 (幅と高さ)
+    Returns:
+        tuple: Tuple containing skeletonized image, thresholded image, and original image dimensions.
+    """
+
+    # Load the image using OpenCV
+    img = cv2.imread(input_file_path)
+
+    if img is None:
+        raise ValueError("Image could not be loaded. Please check the file path.")
+
     height, width = img.shape[:2]
-
-    # グレースケールに変換する
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # 上下反転（座標抽出する際に反転するため）
-    gray_flip = cv2.flip(gray, 0)
+    # Flip and ROtate for coordinate extraction
+    flipped_gray = cv2.flip(gray, 0)
+    rotated_gray = cv2.rotate(flipped_gray, cv2.ROTATE_90_CLOCKWISE)
 
-    # 90度回転（座標抽出時に回転するため）
-    gray_rotate = cv2.rotate(gray_flip, cv2.ROTATE_90_CLOCKWISE)
+    # Apply thresholding
+    _, thresholded = cv2.threshold(rotated_gray, 192, 255, cv2.THRESH_OTSU)
 
-    # Thresholding
-    retval, dst = cv2.threshold(gray_rotate, 192, 255, cv2.THRESH_OTSU)
-
-    # Skeletonization
-    ske = skeletonize(~(dst != 0))
-
-    # Convert the skeleton to 8-bit (0 or 255)
-    ske_8bit = (ske * 255).astype(np.uint8)
+    # Perform 8-bit format skeletonization
+    skeletonized = skeletonize(~(thresholded != 0))
+    eight_bit_skeleton = (skeletonized * 255).astype(np.uint8)
 
     # Save the skeletonized image
-    cv2.imwrite(os.path.join(save_dir, 'skeletonized_' + os.path.basename(file_path)), ske_8bit)
+    save_path = os.path.join(output_dir, f"skeletonized_{os.path.basename(input_file_path)}")
+    cv2.imwrite(save_path, eight_bit_skeleton)
 
-    # ここで、処理された画像や他の重要なデータを返す
-    return ske_8bit, dst, (width, height)
+    return eight_bit_skeleton, thresholded, (width, height)
+
 
 
 def create_skeltonize_graph(skeletonize_image):
