@@ -540,17 +540,18 @@ def generate_svg(graph, route, file_name, invalid_path=False):
 def main():
     print("flats-raster-vector-converter is running")
 
-    # Set file names and paths
-    filename = 'irasutoya'
-    file_path = './img_line/' + filename + '.png'
-    save_dir = './out/'
     colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'black']
-    
-    processed_image, data, img_size = process_image(file_path, save_dir)
+
+    # Set file names and paths
+    image_name = 'irasutoya'
+    input_file_path = f"./img_line/{image_name}.png"
+    output_dir = "./out/"
+
+    processed_image, data, img_size = process_image(input_file_path, output_dir)
 
     graph = create_skeltonize_graph(processed_image)
 
-    draw_graph(graph, colors, save_dir, img_size, filename + '_raw')
+    draw_graph(graph, colors, output_dir, img_size, image_name + '_raw')
 
 
     """
@@ -564,7 +565,7 @@ def main():
     combined_graph = combine_edges(graph)
 
     save_dir2 = './out/'
-    draw_graph(combined_graph, colors, save_dir2, img_size, filename + '_combined')
+    draw_graph(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
 
     # show graph information
     #isolates = number_of_isolates(combined_graph)
@@ -572,8 +573,8 @@ def main():
     print(f"Graph information before optimizing: {combined_graph}")
 
     save_dir_svg = './out/'
-    draw_svg(combined_graph, colors, save_dir_svg, filename + '_combined')
-    draw_svg(combined_graph, ['black'], save_dir_svg, filename + '_combined' + '_black')
+    draw_svg(combined_graph, colors, save_dir_svg, image_name + '_combined')
+    draw_svg(combined_graph, ['black'], save_dir_svg, image_name + '_combined' + '_black')
 
     # remove unused node and remap nodes
     graph_removed_isolates = remove_isolates(combined_graph)
@@ -605,8 +606,8 @@ def main():
     print(route)
 
     # export optimized path as svg files
-    generate_svg(remapped_graph, route, './out/' + filename + '_optimized_path.svg')
-    generate_svg(remapped_graph, route, './out/' + filename + '_optimized_path_invalid.svg', invalid_path=True)
+    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
+    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path_invalid.svg', invalid_path=True)
 
     print("completed")
 
