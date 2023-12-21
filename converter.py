@@ -83,13 +83,11 @@ def combine_edges(graph):
     
             # エッジの順序を反転（必要に応じて）
             if reverse_first:
-                pts1 = np.flip(pts1, axis=0)
                 start_node_1, end_node_1 = edge1[1], edge1[0]
             else:
                 start_node_1, end_node_1 = edge1[:2]
     
             if reverse_second:
-                pts2 = np.flip(pts2, axis=0)
                 start_node_2, end_node_2 = edge2[1], edge2[0]
             else:
                 start_node_2, end_node_2 = edge2[:2]
@@ -100,15 +98,9 @@ def combine_edges(graph):
                 print("edge1 direction NG")
                 pts1 = np.flip(pts1, axis=0)
 
-                if np.array_equal(graph.nodes[start_node_1]['o'], pts1[0]):
-                    print("edge1 direction OK")
-
             if not np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
                 print("edge2 direction NG")
                 pts2 = np.flip(pts2, axis=0)
-
-                if np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
-                    print("edge2 direction OK")
 
 
             # 新しいエッジの座標を計算
