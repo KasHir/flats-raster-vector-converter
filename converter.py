@@ -68,7 +68,17 @@ Graph Optimization
 """
 
 def combine_edges(graph):
-    combined_graph = nx.MultiGraph(graph)  # マルチグラフのコピーを作成
+    """
+    Combines edges in a NetworkX MultiGraph to reduce the total number of edges and nodes.
+
+    Args:
+        graph (nx.MultiGraph): The graph to be processed.
+
+    Returns:
+        nx.MultiGraph: The graph with combined edges.
+    """
+    
+    combined_graph = nx.MultiGraph(graph)
         
     def merge_edges(graph, edge1, edge2, reverse_first=False, reverse_second=False):
         """
@@ -91,7 +101,7 @@ def combine_edges(graph):
         pts1 = graph.edges[edge1]['pts']  # edge1's points
         pts2 = graph.edges[edge2]['pts']  # edge2's points
 
-        # reverse edges's nodes if needed
+        # Reverse edges's nodes if needed
         def get_ordered_nodes(edge, reverse):
             """Return start and end nodes of an edge, reversed if specified."""
             return (edge[1], edge[0]) if reverse else (edge[0], edge[1])
@@ -99,19 +109,19 @@ def combine_edges(graph):
         start_node_1, end_node_1 = get_ordered_nodes(edge1, reverse_first)
         start_node_2, end_node_2 = get_ordered_nodes(edge2, reverse_second)
 
-        # reverse the order of edge's points if node direction was swapped
+        # Reverse the order of edge's points if node direction was swapped
         if not np.array_equal(graph.nodes[start_node_1]['o'], pts1[0]):
             pts1 = np.flip(pts1, axis=0)
 
         if not np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
             pts2 = np.flip(pts2, axis=0)
 
-        # merge edge's points and reorder them because of undirected graph in sknw
+        # Merge edge's points and reorder them because of undirected graph in sknw
         new_pts = np.concatenate((pts1, pts2), axis=0)
         if start_node_1 > end_node_2:
             new_pts = np.flip(new_pts, axis=0)
             
-        # remove the old two edges and add new merged edge
+        # Remove the old two edges and add new merged edge
         graph.remove_edge(*edge1)
         graph.remove_edge(*edge2)
 
@@ -142,12 +152,15 @@ def combine_edges(graph):
         
         return outgoing_edges_dict, incoming_edges_dict
 
-    def process_edges(graph):
+    def process_edges(graph) -> bool:
         """
-        Search mergeable edges which have the same node to reduce the number of node and edges.
-
+        Processes edges in the graph to find and merge mergeable edges.
+        
         Args:
             graph (nx.MultiGraph): The graph to process.
+        
+        Return:
+            bool: True if the edge count decreased after merging, False otherwise.
         """
 
         def merge_self_loops(graph, outgoing_edges_dict, incoming_edges_dict):
@@ -162,6 +175,7 @@ def combine_edges(graph):
             Returns:
                 bool: True if any changes were made, False otherwise.
             """
+
             changes_made = False
 
             for node, edges_list in outgoing_edges_dict.items():
@@ -170,7 +184,11 @@ def combine_edges(graph):
 
                     # Check for self-loop
                     if start_edge1 == end_edge1:
-                        for edge2 in (outgoing_edges_dict[node] + incoming_edges_dict.get(node, [])):
+
+                        # Generate a list of candidate edges to merge with
+                        candidate_edges = (outgoing_edges_dict[node] + incoming_edges_dict.get(node, []))
+
+                        for edge2 in candidate_edges:
                             start_edge2, end_edge2 = edge2[:2]
 
                             if edge1 == edge2:
@@ -200,19 +218,20 @@ def combine_edges(graph):
             Returns:
                 bool: True if any changes were made, False otherwise.
             """
+
             changes_made = False
 
             for node, edges_list in outgoing_edges_dict.items():
                 for edge1 in edges_list:
                     start_edge1, end_edge1 = edge1[:2]
 
-                    # Generate a list of potential edges to merge with
-                    potential_edges = (outgoing_edges_dict[node] +
+                    # Generate a list of candidate edges to merge with
+                    candidate_edges = (outgoing_edges_dict[node] +
                                     incoming_edges_dict.get(node, []) +
                                     outgoing_edges_dict.get(end_edge1, []) +
                                     incoming_edges_dict.get(end_edge1, []))
 
-                    for edge2 in potential_edges:
+                    for edge2 in candidate_edges:
                         if edge1 == edge2:
                             continue
 
@@ -238,32 +257,36 @@ def combine_edges(graph):
 
             return changes_made
 
-
-        # create edge's node dictionaries to improve serch performance
+        # Create edge's node dictionaries to improve serch performance
         outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
 
+        initial_edges_count = len(graph.edges())
         changes_made = True
         
         while changes_made:
             changes_made = False
 
-            # search and merge self-loop edges to avoid creating isolated self-loops
+            # Search and merge self-loop edges to avoid creating isolated self-loops
             if merge_self_loops(graph, outgoing_edges_dict, incoming_edges_dict):
                 changes_made = True
                 outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
                 continue
             
-            # search and merge non self-loops if all self-loops are merged
+            # Search and merge non self-loops if all self-loops are merged
             if not changes_made:
                 if not changes_made:
                     changes_made = merge_non_self_loop_edges(graph, outgoing_edges_dict, incoming_edges_dict)
 
-
-            # update edge's node dictionaries when the graph is changed
+            # Update edge's node dictionaries when the graph is changed
             if changes_made:
                 outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
+        
+        return len(graph.edges()) < initial_edges_count
                 
-    process_edges(combined_graph)
+    if process_edges(combined_graph):
+        print("Edges were optimized!")
+    else:
+        print("No edge merging was possible.")
 
     return combined_graph
 
