@@ -72,60 +72,54 @@ def combine_edges(graph):
         
     def merge_edges(graph, edge1, edge2, reverse_first=False, reverse_second=False):
         """
-        2つのエッジを結合し、新しいエッジを作成する関数。
-        NetworkXのMultiGraphのedgeに含まれる座標群はptsとして格納されている
-        必要に応じてエッジ（始点終点に応じて座標軍の並び）の順序を逆転させる。
+        Merges two edges in a NetworkX MultiGraph and creates a new edge.
+
+        Args:
+            graph (nx.MultiGraph): The graph where edges are merged.
+            edge1 (tuple): The first edge to merge.
+            edge2 (tuple): The second edge to merge.
+            reverse_first (bool): If True, reverse the order of edge1's points.
+            reverse_second (bool): If True, reverse the order of edge2's points.
+
+        This function checks if both edges exist in the graph, reverses their order if necessary, 
+        merges their points, and adds the new edge to the graph.
         """
-        if edge1 in graph.edges(keys=True) and edge2 in graph.edges(keys=True):# エッジがグラフに存在するか確認
-            #print(f"merge: {edge1}, {edge2}")
-            pts1 = graph.edges[edge1]['pts']  # edge1の座標
-            pts2 = graph.edges[edge2]['pts']  # edge2の座標
-    
-            # エッジの順序を反転（必要に応じて）
-            if reverse_first:
-                start_node_1, end_node_1 = edge1[1], edge1[0]
-            else:
-                start_node_1, end_node_1 = edge1[:2]
-    
-            if reverse_second:
-                start_node_2, end_node_2 = edge2[1], edge2[0]
-            else:
-                start_node_2, end_node_2 = edge2[:2]
-    
-            # direction check
-            print("direction check")
-            if not np.array_equal(graph.nodes[start_node_1]['o'], pts1[0]):
-                print("edge1 direction NG")
-                pts1 = np.flip(pts1, axis=0)
 
-            if not np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
-                print("edge2 direction NG")
-                pts2 = np.flip(pts2, axis=0)
+        if edge1 not in graph.edges(keys=True) or edge2 not in graph.edges(keys=True):
+            raise ValueError(f"Edges do not exist: {edge1}, {edge2}")
+        
+        pts1 = graph.edges[edge1]['pts']  # edge1's points
+        pts2 = graph.edges[edge2]['pts']  # edge2's points
 
+        # reverse edges's nodes if needed
+        def get_ordered_nodes(edge, reverse):
+            """Return start and end nodes of an edge, reversed if specified."""
+            return (edge[1], edge[0]) if reverse else (edge[0], edge[1])
 
-            # 新しいエッジの座標を計算
-            merged_coordinate = graph.nodes[end_node_1]['o']
-            new_pts = np.vstack((pts1, merged_coordinate, pts2))
-    
+        start_node_1, end_node_1 = get_ordered_nodes(edge1, reverse_first)
+        start_node_2, end_node_2 = get_ordered_nodes(edge2, reverse_second)
 
-            # 新しいエッジの順序が逆の場合、座標を反転
-            if start_node_1 > end_node_2:
-                new_pts = np.flip(new_pts, axis=0)
-                #print('pts reverse')
-                
-            # 元のエッジを削除し、新しいエッジを追加
-            graph.remove_edge(edge1[0], edge1[1], key=edge1[2])
-            graph.remove_edge(edge2[0], edge2[1], key=edge2[2])
+        # reverse the order of edge's points if node direction was swapped
+        if not np.array_equal(graph.nodes[start_node_1]['o'], pts1[0]):
+            pts1 = np.flip(pts1, axis=0)
 
-            new_key = graph.new_edge_key(start_node_1, end_node_2)
-            graph.add_edge(start_node_1, end_node_2, new_key, pts=new_pts)
+        if not np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
+            pts2 = np.flip(pts2, axis=0)
 
-            print(f"merged:({edge1[0]}, {edge1[1]}) , ({edge2[0]}, {edge2[1]}) -> {start_node_1}, {end_node_2}")
+        # merge edge's points and reorder them because of undirected graph in sknw
+        new_pts = np.concatenate((pts1, pts2), axis=0)
+        if start_node_1 > end_node_2:
+            new_pts = np.flip(new_pts, axis=0)
+            
+        # remove the old two edges and add new merged edge
+        graph.remove_edge(*edge1)
+        graph.remove_edge(*edge2)
 
-            #DEBUG_NO = str(edge1[0]) +','+ str(edge1[1]) +','+ str(edge2[0]) + ','+ str(edge2[1])
-            #draw_graph(graph, colors, save_dir2, img_size, save_name=filename+DEBUG_NO)
-        else:
-             print(f"エッジが存在しません: {edge1}, {edge2}")
+        new_key = graph.new_edge_key(start_node_1, end_node_2)
+        graph.add_edge(start_node_1, end_node_2, new_key, pts=new_pts)
+        
+        print(f"merged:({edge1[0]}, {edge1[1]}) , ({edge2[0]}, {edge2[1]}) -> ({start_node_1}, {end_node_2})")
+
     
     def create_edge_mappings(graph: nx.MultiGraph) -> (dict, dict):
         """
