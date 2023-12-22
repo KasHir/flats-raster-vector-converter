@@ -142,56 +142,93 @@ def combine_edges(graph):
         
         return outgoing_edges_dict, incoming_edges_dict
 
-
-    # 結合可能なエッジの探索
     def process_edges(graph):
-        #start_time = time.time() # for benchmark
-        
+        """
+        Find margible edges which have the same node to reduce the number of node and edges.
+
+        Args:
+            graph (nx.MultiGraph): The graph to process.
+        """
+
+        def merge_self_loops(outgoing_edges_dict, incoming_edges_dict):
+            """
+            Merges self-loop edges in a graph.
+
+            Args:
+                outgoing_edges_dict (dict): Dictionary mapping nodes to their outgoing edges.
+                incoming_edges_dict (dict): Dictionary mapping nodes to their incoming edges.
+
+            Returns:
+                bool: True if any changes were made, False otherwise.
+            """
+            changes_made = False
+
+            for node, edges_list in outgoing_edges_dict.items():
+                for edge1 in edges_list:
+                    e1s, e1e = edge1[:2]  # start and end nodes of edge1
+
+                    # Check for self-loop
+                    if e1s == e1e:
+                        for edge2 in (outgoing_edges_dict[node] + incoming_edges_dict.get(node, [])):
+                            e2s, e2e = edge2[:2]
+
+                            if edge1 == edge2:
+                                continue  # Skip if it's the same edge
+
+                            # Merge logic for self-loop
+                            if e1e == e2s:
+                                merge_edges(graph, edge1, edge2)
+                                changes_made = True
+                                return changes_made
+                            elif e1e == e2e:
+                                merge_edges(graph, edge1, edge2, reverse_second=True)
+                                changes_made = True
+                                return changes_made
+
+            return changes_made
+
         changes_made = True
 
         # 各ノードにつながるエッジのリストを辞書として登録
         outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
-        #print(f"edges_dict: {edges_dict}")
         
         while changes_made:
             changes_made = False  # このループでの変更がないと仮定
-            
+            # Refactored logic for self-loop merging
+            if merge_self_loops(outgoing_edges_dict, incoming_edges_dict):
+                changes_made = True
+                outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
+                continue
+            """
             # 各ノードから出発するエッジが登録した辞書を用いて探索，エッジを結合
             # 始点と終点が同じノードになるエッジ（self_loop）がなくなるまで優先して結合
             for node, edges_list in outgoing_edges_dict.items():
-                #print(f"node:{node}, {edges_list}")
-                
                 for edge1 in edges_list:
-                    #print(f"edge1: {edge1}; ({node},{node_edge1end})")
-                    
                     for edge2 in (outgoing_edges_dict[node] + incoming_edges_dict.get(node, [])):
-                        #print(f"edge1: {edge1}, edge2: {edge2}")
                         
-                        e1s = edge1[0] # start node of edge1
-                        e1e = edge1[1] #   end node of edge1
-                        e2s = edge2[0]
-                        e2e = edge2[1]
+                        start_node_edge1, end_node_edge1 = edge1[:2]
+                        start_node_edge2, end_node_edge2 = edge2[:2]
 
                         if edge1 == edge2:
                             #print("skip as same")
                             break
-                        if e1s == e1e:
-                            #print(f"{e1s} == {e1e}")
-                            if e1e == e2s:
+                        if start_node_edge1 == end_node_edge1:
+                            #print(f"{start_node_edge1} == {end_node_edge1}")
+                            if end_node_edge1 == start_node_edge2:
                                 merge_edges(graph, edge1, edge2)
                                 changes_made = True
                                 break
-                            elif e1e == e2e:
+                            elif end_node_edge1 == end_node_edge2:
                                 merge_edges(graph, edge1, edge2, reverse_second = True)                                
                                 changes_made = True
                                 break
-                        elif e2s == e2e:
-                            #print(f"{e1s} == {e2e}")
-                            if e1e == e2s:
+                        elif start_node_edge2 == end_node_edge2:
+                            #print(f"{start_node_edge1} == {end_node_edge2}")
+                            if end_node_edge1 == start_node_edge2:
                                 merge_edges(graph, edge1, edge2)
                                 changes_made = True
                                 break
-                            elif e1s == e2s:
+                            elif start_node_edge1 == start_node_edge2:
                                 merge_edges(graph, edge1, edge2, reverse_first = True)                                
                                 changes_made = True
                                 break
@@ -202,7 +239,7 @@ def combine_edges(graph):
         
                 if changes_made:
                     break
-        
+                """
             # 優先対象（self_loopのエッジ）がなかったら，独立したedge1とedge2の中から結合可能な組み合わせを探索
             if not changes_made:
                 
