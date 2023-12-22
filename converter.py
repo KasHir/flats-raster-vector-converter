@@ -1,51 +1,61 @@
+# Standard library imports
 import os
 import sys
+import time
 
+# Third-party imports
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
-import svgwrite
-from skimage.morphology import skeletonize
-
+import numpy as np
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+from skimage.morphology import skeletonize
+import svgwrite
 
-# ローカルライブラリのインポート
+# Local application/library specific imports
 sys.path.insert(0, './external/sknw')
 import sknw
 
-import time
 
-def process_image(file_path, save_dir):
-    # 画像をOpenCVで読み込む
-    img = cv2.imread(file_path)
+def process_image(
+        input_file_path: str, output_dir: str,
+        )-> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
+    """
+    Processes an image by converting it to grayscale, flipping, rotating, thresholding, and skeletonizing.
+    Args:
+        input_file_path (str): Path to the input image file.
+        output_dir (str): Directory to save the processed image.
 
-    # 画像サイズを取得 (幅と高さ)
+    Returns:
+        tuple: Tuple containing skeletonized image, thresholded image, and original image dimensions.
+    """
+
+    # Load the image using OpenCV
+    img = cv2.imread(input_file_path)
+
+    if img is None:
+        raise ValueError("Image could not be loaded. Please check the file path.")
+
     height, width = img.shape[:2]
-
-    # グレースケールに変換する
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # 上下反転（座標抽出する際に反転するため）
-    gray_flip = cv2.flip(gray, 0)
+    # Flip and ROtate for coordinate extraction
+    flipped_gray = cv2.flip(gray, 0)
+    rotated_gray = cv2.rotate(flipped_gray, cv2.ROTATE_90_CLOCKWISE)
 
-    # 90度回転（座標抽出時に回転するため）
-    gray_rotate = cv2.rotate(gray_flip, cv2.ROTATE_90_CLOCKWISE)
+    # Apply thresholding
+    _, thresholded = cv2.threshold(rotated_gray, 192, 255, cv2.THRESH_OTSU)
 
-    # Thresholding
-    retval, dst = cv2.threshold(gray_rotate, 192, 255, cv2.THRESH_OTSU)
-
-    # Skeletonization
-    ske = skeletonize(~(dst != 0))
-
-    # Convert the skeleton to 8-bit (0 or 255)
-    ske_8bit = (ske * 255).astype(np.uint8)
+    # Perform 8-bit format skeletonization
+    skeletonized = skeletonize(~(thresholded != 0))
+    eight_bit_skeleton = (skeletonized * 255).astype(np.uint8)
 
     # Save the skeletonized image
-    cv2.imwrite(os.path.join(save_dir, 'skeletonized_' + os.path.basename(file_path)), ske_8bit)
+    save_path = os.path.join(output_dir, f"skeletonized_{os.path.basename(input_file_path)}")
+    cv2.imwrite(save_path, eight_bit_skeleton)
 
-    # ここで、処理された画像や他の重要なデータを返す
-    return ske_8bit, dst, (width, height)
+    return eight_bit_skeleton, thresholded, (width, height)
+
 
 
 def create_skeltonize_graph(skeletonize_image):
@@ -58,208 +68,225 @@ Graph Optimization
 """
 
 def combine_edges(graph):
-    combined_graph = nx.MultiGraph(graph)  # マルチグラフのコピーを作成
+    """
+    Combines edges in a NetworkX MultiGraph to reduce the total number of edges and nodes.
+
+    Args:
+        graph (nx.MultiGraph): The graph to be processed.
+
+    Returns:
+        nx.MultiGraph: The graph with combined edges.
+    """
+    
+    combined_graph = nx.MultiGraph(graph)
         
     def merge_edges(graph, edge1, edge2, reverse_first=False, reverse_second=False):
         """
-        2つのエッジを結合し、新しいエッジを作成する関数。
-        NetworkXのMultiGraphのedgeに含まれる座標群はptsとして格納されている
-        必要に応じてエッジ（始点終点に応じて座標軍の並び）の順序を逆転させる。
+        Merges two edges in a NetworkX MultiGraph and creates a new edge.
+
+        Args:
+            graph (nx.MultiGraph): The graph where edges are merged.
+            edge1 (tuple): The first edge to merge.
+            edge2 (tuple): The second edge to merge.
+            reverse_first (bool): If True, reverse the order of edge1's points.
+            reverse_second (bool): If True, reverse the order of edge2's points.
+
+        This function checks if both edges exist in the graph, reverses their order if necessary, 
+        merges their points, and adds the new edge to the graph.
         """
-        if edge1 in graph.edges(keys=True) and edge2 in graph.edges(keys=True):# エッジがグラフに存在するか確認
-            #print(f"merge: {edge1}, {edge2}")
-            pts1 = graph.edges[edge1]['pts']  # edge1の座標
-            pts2 = graph.edges[edge2]['pts']  # edge2の座標
+
+        if edge1 not in graph.edges(keys=True) or edge2 not in graph.edges(keys=True):
+            raise ValueError(f"Edges do not exist: {edge1}, {edge2}")
+        
+        pts1 = graph.edges[edge1]['pts']  # edge1's points
+        pts2 = graph.edges[edge2]['pts']  # edge2's points
+
+        # Reverse edges's nodes if needed
+        def get_ordered_nodes(edge, reverse):
+            """Return start and end nodes of an edge, reversed if specified."""
+            return (edge[1], edge[0]) if reverse else (edge[0], edge[1])
+
+        start_node_1, end_node_1 = get_ordered_nodes(edge1, reverse_first)
+        start_node_2, end_node_2 = get_ordered_nodes(edge2, reverse_second)
+
+        # Reverse the order of edge's points if node direction was swapped
+        if not np.array_equal(graph.nodes[start_node_1]['o'], pts1[0]):
+            pts1 = np.flip(pts1, axis=0)
+
+        if not np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
+            pts2 = np.flip(pts2, axis=0)
+
+        # Merge edge's points and reorder them because of undirected graph in sknw
+        new_pts = np.concatenate((pts1, pts2), axis=0)
+        if start_node_1 > end_node_2:
+            new_pts = np.flip(new_pts, axis=0)
+            
+        # Remove the old two edges and add new merged edge
+        graph.remove_edge(*edge1)
+        graph.remove_edge(*edge2)
+
+        new_key = graph.new_edge_key(start_node_1, end_node_2)
+        graph.add_edge(start_node_1, end_node_2, new_key, pts=new_pts)
+        
+        print(f"merged:({edge1[0]}, {edge1[1]}) , ({edge2[0]}, {edge2[1]}) -> ({start_node_1}, {end_node_2})")
+
     
-            # エッジの順序を反転（必要に応じて）
-            if reverse_first:
-                pts1 = np.flip(pts1, axis=0)
-                start_node_1, end_node_1 = edge1[1], edge1[0]
-            else:
-                start_node_1, end_node_1 = edge1[:2]
-    
-            if reverse_second:
-                pts2 = np.flip(pts2, axis=0)
-                start_node_2, end_node_2 = edge2[1], edge2[0]
-            else:
-                start_node_2, end_node_2 = edge2[:2]
-    
-            # direction check
-            print("direction check")
-            if not np.array_equal(graph.nodes[start_node_1]['o'], pts1[0]):
-                print("edge1 direction NG")
-                pts1 = np.flip(pts1, axis=0)
+    def create_edge_mappings(graph: nx.MultiGraph) -> (dict, dict):
+        """
+        Create two dictionaries to map nodes to their outgoing and incoming edges.
 
-                if np.array_equal(graph.nodes[start_node_1]['o'], pts1[0]):
-                    print("edge1 direction OK")
+        Args:
+            graph (nx.MultiGraph): The MultiGraph from which to create edge mappings.
 
-            if not np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
-                print("edge2 direction NG")
-                pts2 = np.flip(pts2, axis=0)
-
-                if np.array_equal(graph.nodes[start_node_2]['o'], pts2[0]):
-                    print("edge2 direction OK")
-
-
-            # 新しいエッジの座標を計算
-            merged_coordinate = graph.nodes[end_node_1]['o']
-            new_pts = np.vstack((pts1, merged_coordinate, pts2))
-    
-
-            # 新しいエッジの順序が逆の場合、座標を反転
-            if start_node_1 > end_node_2:
-                new_pts = np.flip(new_pts, axis=0)
-                #print('pts reverse')
-                
-            # 元のエッジを削除し、新しいエッジを追加
-            graph.remove_edge(edge1[0], edge1[1], key=edge1[2])
-            graph.remove_edge(edge2[0], edge2[1], key=edge2[2])
-
-            new_key = graph.new_edge_key(start_node_1, end_node_2)
-            graph.add_edge(start_node_1, end_node_2, new_key, pts=new_pts)
-
-            print(f"merged:({edge1[0]}, {edge1[1]}) , ({edge2[0]}, {edge2[1]}) -> {start_node_1}, {end_node_2}")
-
-            #DEBUG_NO = str(edge1[0]) +','+ str(edge1[1]) +','+ str(edge2[0]) + ','+ str(edge2[1])
-            #draw_graph(graph, colors, save_dir2, img_size, save_name=filename+DEBUG_NO)
-        else:
-             print(f"エッジが存在しません: {edge1}, {edge2}")
-
-    # 各ノードから出発するエッジを格納する辞書を作成．探索効率化のため
-    def create_edges_reverse_dict(graph):
-        edges_dict = {}
-        edges_reverse_dict = {}
+        Returns:
+            tuple of two dicts: The first dictionary (outgoing_edges_dict) maps each node to its outgoing edges,
+                                and the second dictionary (incoming_edges_dict) maps each node to its incoming edges.
+        """
+        
+        outgoing_edges_dict = {}
+        incoming_edges_dict = {}
         for edge in graph.edges(keys=True):
             start_node, end_node = edge[:2]
-            edges_dict.setdefault(start_node, []).append(edge)
-            edges_reverse_dict.setdefault(end_node, []).append(edge)
-
-        return edges_dict, edges_reverse_dict
-    
-    # 結合可能なエッジの探索
-    def process_edges(graph):
-        #start_time = time.time() # for benchmark
+            outgoing_edges_dict.setdefault(start_node, []).append(edge)
+            incoming_edges_dict.setdefault(end_node, []).append(edge)
         
-        changes_made = True
+        return outgoing_edges_dict, incoming_edges_dict
 
-        # 各ノードにつながるエッジのリストを辞書として登録
-        edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
-        #print(f"edges_dict: {edges_dict}")
+    def process_edges(graph) -> bool:
+        """
+        Processes edges in the graph to find and merge mergeable edges.
         
-        while changes_made:
-            changes_made = False  # このループでの変更がないと仮定
-            
-            # 各ノードから出発するエッジが登録した辞書を用いて探索，エッジを結合
-            # 始点と終点が同じノードになるエッジ（self_loop）がなくなるまで優先して結合
-            for node, edges_list in edges_dict.items():
-                #print(f"node:{node}, {edges_list}")
-                
+        Args:
+            graph (nx.MultiGraph): The graph to process.
+        
+        Return:
+            bool: True if the edge count decreased after merging, False otherwise.
+        """
+
+        def merge_self_loops(graph, outgoing_edges_dict, incoming_edges_dict):
+            """
+            Merges self-loop edges in a graph.
+
+            Args:
+                graph (nx.MultiGraph): The graph to process.
+                outgoing_edges_dict (dict): Dictionary mapping nodes to their outgoing edges.
+                incoming_edges_dict (dict): Dictionary mapping nodes to their incoming edges.
+
+            Returns:
+                bool: True if any changes were made, False otherwise.
+            """
+
+            changes_made = False
+
+            for node, edges_list in outgoing_edges_dict.items():
                 for edge1 in edges_list:
-                    #print(f"edge1: {edge1}; ({node},{node_edge1end})")
-                    
-                    for edge2 in (edges_dict[node] + edges_reverse_dict.get(node, [])):
-                        #print(f"edge1: {edge1}, edge2: {edge2}")
-                        
-                        e1s = edge1[0] # start node of edge1
-                        e1e = edge1[1] #   end node of edge1
-                        e2s = edge2[0]
-                        e2e = edge2[1]
+                    start_edge1, end_edge1 = edge1[:2]  # start and end nodes of edge1
 
-                        if edge1 == edge2:
-                            #print("skip as same")
-                            break
-                        if e1s == e1e:
-                            #print(f"{e1s} == {e1e}")
-                            if e1e == e2s:
-                                merge_edges(graph, edge1, edge2)
-                                changes_made = True
-                                break
-                            elif e1e == e2e:
-                                merge_edges(graph, edge1, edge2, reverse_second = True)                                
-                                changes_made = True
-                                break
-                        elif e2s == e2e:
-                            #print(f"{e1s} == {e2e}")
-                            if e1e == e2s:
-                                merge_edges(graph, edge1, edge2)
-                                changes_made = True
-                                break
-                            elif e1s == e2s:
-                                merge_edges(graph, edge1, edge2, reverse_first = True)                                
-                                changes_made = True
-                                break
-                            
-                    if changes_made:
-                        edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
-                        break
-        
-                if changes_made:
-                    break
-        
-            # 優先対象（self_loopのエッジ）がなかったら，独立したedge1とedge2の中から結合可能な組み合わせを探索
-            if not changes_made:
-                
-                for node, edges_list in edges_dict.items():
-                    #print(f"node:{node}, {edges_list}")
-                    
-                    for edge1 in edges_list:
-                        node_edge1end = edge1[1]
-                        #print(f"edge1: {edge1}; ({node},{node_edge1end})")
+                    # Check for self-loop
+                    if start_edge1 == end_edge1:
 
+                        # Generate a list of candidate edges to merge with
+                        candidate_edges = (outgoing_edges_dict[node] + incoming_edges_dict.get(node, []))
 
-                        for edge2 in (edges_dict[node]
-                                       + edges_reverse_dict.get(node, [])
-                                       + edges_dict.get(node_edge1end, [])
-                                       + edges_reverse_dict.get(node_edge1end, [])):
-                            #print(f"edge2: {edge2}")
-                            
-                            e1s = edge1[0]
-                            e1e = edge1[1]
-                            e2s = edge2[0]
-                            e2e = edge2[1]
-            
+                        for edge2 in candidate_edges:
+                            start_edge2, end_edge2 = edge2[:2]
+
                             if edge1 == edge2:
-                                #print("skip")
-                                a=1
-                                #break                    
-                            elif e1e == e2s:
-                                #print(f"connect FF: ({e1s}, {e1e}), ({e2s}, {e2e})")
+                                continue  # Skip if it's the same edge
+
+                            # Merge logic for self-loop
+                            if end_edge1 == start_edge2:
                                 merge_edges(graph, edge1, edge2)
                                 changes_made = True
-                                break
-                            elif e1e == e2e:
-                                #print(f"connect FT: ({e1s}, {e1e}), ({e2s}, {e2e})")
+                                return changes_made
+                            elif end_edge1 == end_edge2:
                                 merge_edges(graph, edge1, edge2, reverse_second=True)
                                 changes_made = True
-                                break
-                            elif e1s == e2s:
-                                #print(f"connect TF: ({e1s}, {e1e}), ({e2s}, {e2e})")
-                                merge_edges(graph, edge1, edge2, reverse_first=True)
-                                changes_made = True
-                                break
-                            elif e1s == e2e:
-                                #print(f"connect TT: ({e1s}, {e1e}), ({e2s}, {e2e})")
-                                merge_edges(graph, edge1, edge2, reverse_first=True, reverse_second=True)
-                                changes_made = True
-                                break
-                                
-                        if changes_made:
-                            edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
-                            break
-            
-                    if changes_made:
-                        break
+                                return changes_made
 
-            # エッジの結合または接続が行われた場合、関連するエッジを更新
+            return changes_made
+
+        def merge_non_self_loop_edges(graph, outgoing_edges_dict, incoming_edges_dict):
+            """
+            Merges non-self-loop edges in the graph.
+
+            Args:
+                graph (nx.MultiGraph): The graph to process.
+                outgoing_edges_dict (dict): Dictionary mapping nodes to their outgoing edges.
+                incoming_edges_dict (dict): Dictionary mapping nodes to their incoming edges.
+
+            Returns:
+                bool: True if any changes were made, False otherwise.
+            """
+
+            changes_made = False
+
+            for node, edges_list in outgoing_edges_dict.items():
+                for edge1 in edges_list:
+                    start_edge1, end_edge1 = edge1[:2]
+
+                    # Generate a list of candidate edges to merge with
+                    candidate_edges = (outgoing_edges_dict[node] +
+                                    incoming_edges_dict.get(node, []) +
+                                    outgoing_edges_dict.get(end_edge1, []) +
+                                    incoming_edges_dict.get(end_edge1, []))
+
+                    for edge2 in candidate_edges:
+                        if edge1 == edge2:
+                            continue
+
+                        start_edge2, end_edge2 = edge2[:2]
+
+                        # Determine how edges should be merged based on their start and end nodes
+                        if end_edge1 == start_edge2:
+                            merge_edges(graph, edge1, edge2)
+                            changes_made = True
+                            return changes_made
+                        elif end_edge1 == end_edge2:
+                            merge_edges(graph, edge1, edge2, reverse_second=True)
+                            changes_made = True
+                            return changes_made
+                        elif start_edge1 == start_edge2:
+                            merge_edges(graph, edge1, edge2, reverse_first=True)
+                            changes_made = True
+                            return changes_made
+                        elif start_edge1 == end_edge2:
+                            merge_edges(graph, edge1, edge2, reverse_first=True, reverse_second=True)
+                            changes_made = True
+                            return changes_made
+
+            return changes_made
+
+        # Create edge's node dictionaries to improve serch performance
+        outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
+
+        initial_edges_count = len(graph.edges())
+        changes_made = True
+        
+        while changes_made:
+            changes_made = False
+
+            # Search and merge self-loop edges to avoid creating isolated self-loops
+            if merge_self_loops(graph, outgoing_edges_dict, incoming_edges_dict):
+                changes_made = True
+                outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
+                continue
+            
+            # Search and merge non self-loops if all self-loops are merged
+            if not changes_made:
+                if not changes_made:
+                    changes_made = merge_non_self_loop_edges(graph, outgoing_edges_dict, incoming_edges_dict)
+
+            # Update edge's node dictionaries when the graph is changed
             if changes_made:
-                edges_dict, edges_reverse_dict = create_edges_reverse_dict(graph)
-            
-            # for benchmark
-            #end_time = time.time()
-            #print(f"Process edges took {end_time - start_time} seconds.")
-
-    # グラフ内のエッジを処理
-    process_edges(combined_graph)
+                outgoing_edges_dict, incoming_edges_dict = create_edge_mappings(graph)
+        
+        return len(graph.edges()) < initial_edges_count
+                
+    if process_edges(combined_graph):
+        print("Edges were optimized!")
+    else:
+        print("No edge merging was possible.")
 
     return combined_graph
 
@@ -530,17 +557,18 @@ def generate_svg(graph, route, file_name, invalid_path=False):
 def main():
     print("flats-raster-vector-converter is running")
 
-    # Set file names and paths
-    filename = 'irasutoya'
-    file_path = './img_line/' + filename + '.png'
-    save_dir = './out/'
     colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'black']
-    
-    processed_image, data, img_size = process_image(file_path, save_dir)
+
+    # Set file names and paths
+    image_name = 'zunda'
+    input_file_path = f"./img_line/{image_name}.png"
+    output_dir = "./out/"
+
+    processed_image, data, img_size = process_image(input_file_path, output_dir)
 
     graph = create_skeltonize_graph(processed_image)
 
-    draw_graph(graph, colors, save_dir, img_size, filename + '_raw')
+    draw_graph(graph, colors, output_dir, img_size, image_name + '_raw')
 
 
     """
@@ -554,7 +582,7 @@ def main():
     combined_graph = combine_edges(graph)
 
     save_dir2 = './out/'
-    draw_graph(combined_graph, colors, save_dir2, img_size, filename + '_combined')
+    draw_graph(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
 
     # show graph information
     #isolates = number_of_isolates(combined_graph)
@@ -562,8 +590,8 @@ def main():
     print(f"Graph information before optimizing: {combined_graph}")
 
     save_dir_svg = './out/'
-    draw_svg(combined_graph, colors, save_dir_svg, filename + '_combined')
-    draw_svg(combined_graph, ['black'], save_dir_svg, filename + '_combined' + '_black')
+    draw_svg(combined_graph, colors, save_dir_svg, image_name + '_combined')
+    draw_svg(combined_graph, ['black'], save_dir_svg, image_name + '_combined' + '_black')
 
     # remove unused node and remap nodes
     graph_removed_isolates = remove_isolates(combined_graph)
@@ -595,8 +623,8 @@ def main():
     print(route)
 
     # export optimized path as svg files
-    generate_svg(remapped_graph, route, './out/' + filename + '_optimized_path.svg')
-    generate_svg(remapped_graph, route, './out/' + filename + '_optimized_path_invalid.svg', invalid_path=True)
+    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
+    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path_invalid.svg', invalid_path=True)
 
     print("completed")
 
