@@ -334,81 +334,78 @@ def create_distance_matrix(graph: nx.MultiGraph) -> dict[int, dict[int, int]]:
 
     return distance_matrix
 
-# 2. OR-Toolsを使用して最短ルートを計算
-def calculate_optimized_route(distance_matrix, graph):
-    start_node = list(graph.nodes())[0] # graphの中にあるいずれかのnodeを始点とする
-    print(f"start_node: {start_node}")
-    
-    # ノードの数を取得
+
+def calculate_optimized_route(
+        distance_matrix: dict[int, dict[int, int]], graph: nx.MultiGraph, verbose: bool = False
+        ) -> list[int]:
+    """
+    Calculates the optimized route for a given graph using the OR-Tools TSP solver.
+
+    Args:
+        distance_matrix (dict[int, dict[int, int]]): A dictionary of dictionaries containing the distances between nodes.
+        graph (nx.MultiGraph): The graph representing the nodes and their connections.
+        verbose (bool): If True, additional details will be printed to the console.
+
+    Returns:
+        list[int]: A list of node IDs representing the optimized route.
+    """
+    start_node = list(graph.nodes())[0]
     num_nodes = len(distance_matrix)
-    print(f"num_nodes: {num_nodes}")
+    if verbose:
+        print(f"start_node: {start_node}")
+        print(f"num_nodes: {num_nodes}")
     
+    # Create the routing index manager
     manager = pywrapcp.RoutingIndexManager(num_nodes, 1, start_node)
+
+    # Create Routing Model
     routing = pywrapcp.RoutingModel(manager)
 
-    
     def distance_callback(from_index, to_index):
+        """Returns the distance between the two nodes."""
+        # Convert from routing variable Index to distance matrix NodeIndex
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
-
         distance = distance_matrix[from_node][to_node]
-        #print(f"Distance from node {from_node} to node {to_node}: {distance}")
-        
         return distance
 
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    # OR-Tools の制約をノードIDに基づいて設定
+    # Apply edge constraints: start and end nodes of the edges are fixed as routes
     for (s, e) in graph.edges():
         if s != e:
             routing.solver().Add(
                 routing.NextVar(manager.NodeToIndex(s)) == manager.NodeToIndex(e))
           
-    # パラメータ設定
+    # Setting first solution strategy
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = (
         routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
-    
-    def print_solution(manager, routing, solution):
-        """Prints solution on console."""
-        print(f"Objective: {solution.ObjectiveValue()} miles")
-        index = routing.Start(0)
-        plan_output = "Route for vehicle 0:\n"
-        route_distance = 0
-        while not routing.IsEnd(index):
-            plan_output += f" {manager.IndexToNode(index)} ->"
-            previous_index = index
-            index = solution.Value(routing.NextVar(index))
-            route_distance += routing.GetArcCostForVehicle(previous_index, index, 0)
-        plan_output += f" {manager.IndexToNode(index)}\n"
-        print(plan_output)
-        plan_output += f"Route distance: {route_distance}miles\n"
-    
-    
-    # 解の計算
-    solution = routing.SolveWithParameters(search_parameters)
-    if solution:
-        print_solution(manager, routing, solution)
 
-    
-    # ルートの取得
+    # Solve and handle potential errors
+    solution = routing.SolveWithParameters(search_parameters)
+    if not solution:
+        raise Exception("No solution found by the solver.")
+
+    # Get the optimized route as list and print the solution
     index = routing.Start(0)
     total_distance = 0
-    route = []
-    route.append(start_node)
+    route = [start_node]
+    plan_output = "Route for vehicle 0:\n"
+
     while not routing.IsEnd(index):
+        plan_output += f" {manager.IndexToNode(index)} ->"
         previous_index = index
         index = solution.Value(routing.NextVar(index))
-        
         route_distance = routing.GetArcCostForVehicle(previous_index, index, 0)
         route.append(manager.IndexToNode(index))
         total_distance += route_distance
-        
-    print('Total distance of the route: {}'.format(total_distance))    
-    return route
-    
 
+    plan_output += f" {manager.IndexToNode(index)}\nTotal distance: {total_distance} pixels\n"
+    print(plan_output)
+
+    return route
 
   
 """
@@ -618,9 +615,6 @@ def main():
     print(f"Process edges took {end_time - start_time} seconds.")
     
     print("Optimizing path (Solving TSP) has finished.")
-
-    # show optimized route
-    print(route)
 
     # export optimized path as svg files
     generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
