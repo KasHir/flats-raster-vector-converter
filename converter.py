@@ -409,7 +409,7 @@ def calculate_optimized_route(
 
   
 """
-PNG file Generator
+Export PNG file function
 """
 def export_graph_png(graph: nx.MultiGraph, colors: list[str],
                 save_dir: str, img_size: tuple[int, int], save_name: str):
@@ -445,28 +445,48 @@ def export_graph_png(graph: nx.MultiGraph, colors: list[str],
 
 
 """
-SVG file Generator
+Export SVG file functions
 """
-def export_graph_svg(graph, colors, save_dir, save_name):
-    outfile_name = os.path.join(save_dir, save_name + '.svg')
+def draw_edge(dwg: svgwrite.Drawing, graph: nx.MultiGraph, 
+              start_node: int, end_node: int, 
+              stroke_color: str, stroke_width: float = 0.8) -> None:
+    """
+    Draws an edge between two nodes on the SVG drawing.
+    
+    This function iterates over all the data associated with the edge between the specified
+    start and end nodes, extracts the polyline points, and adds them to the SVG drawing.
+    """
+    for edge_data in graph[start_node][end_node].values():
+        polyline_points = edge_data['pts'].tolist()
+        dwg.add(dwg.polyline(
+            points=polyline_points,
+            stroke=stroke_color,
+            stroke_width=stroke_width,
+            fill='none'
+        ))
+
+def export_graph_svg(graph: nx.MultiGraph, colors: list[str], 
+                     save_dir: str, save_name: str) -> None:
+    """
+    Exports an SVG file of the graph without a specific route.
+
+    Args:
+        graph (nx.MultiGraph): The graph to be exported.
+        colors (list[str]): A list of colors used for different edges in the graph.
+        save_dir (str): The directory where the SVG file will be saved.
+        save_name (str): The name of the SVG file to be saved.
+
+    This function iterates through each edge in the graph and draws it using the specified colors.
+    It saves the resulting SVG to the specified directory.
+    """
+
+    outfile_name = os.path.join(save_dir, f"{save_name}.svg")
     dwg = svgwrite.Drawing(outfile_name, profile='tiny')
 
-    color_index = 0
+    for color_index, (s, e) in enumerate(graph.edges()):
+        current_color = colors[color_index % len(colors)]
+        draw_edge(dwg, graph, s, e, current_color)
 
-    for s, e in graph.edges():
-
-        for edge_key, edge_data in graph[s][e].items():
-            pts = edge_data['pts'].tolist()
-            current_color = colors[color_index % len(colors)]
-            
-            dwg.add(dwg.polyline(points=pts,
-                                 stroke=current_color,
-                                 stroke_width=0.8,
-                                 fill='none',
-                                 id=f"{s}_{e}_{edge_key}"
-                                ))
-            color_index += 1
-    
     try:
         dwg.save()
         print('Saved:', outfile_name)
@@ -475,22 +495,22 @@ def export_graph_svg(graph, colors, save_dir, save_name):
     finally:
         del dwg
 
-def export_routed_graph_svg(graph, route, file_name, include_invalid_path=False):
-    """Generate an SVG file from a given graph and route."""
-    
-    def handle_edge(start_node, end_node, stroke_color):
-        """Handle drawing an edge or self-loop."""
-        for edge_data in graph[start_node][end_node].values():
-            polyline_points = edge_data['pts'].tolist()
-            dwg.add(dwg.polyline(
-                points=polyline_points,
-                stroke=stroke_color,
-                stroke_width=1,
-                fill='none'
-            ))
+def export_routed_graph_svg(graph: nx.MultiGraph, route: list[int], 
+                            file_name: str, include_invalid_path: bool = False) -> None:
+    """
+    Exports an SVG file representing a routed graph.
 
-    def handle_invalid_path(start_node, end_node):
-        """Handle drawing an invalid path."""
+    Args:
+        graph (nx.MultiGraph): The graph from which the SVG is generated.
+        route (list[int]): A list of node IDs representing the route to be highlighted.
+        file_name (str): The name of the SVG file to be saved.
+        include_invalid_path (bool, optional): If True, invalid paths (paths not present in the graph) are drawn. Defaults to False.
+
+    This function draws each edge in the route on the SVG. If `include_invalid_path` is True, 
+    it also draws lines between non-sequential nodes in the route, marking these as invalid paths.
+    """
+
+    def draw_invalid_path(start_node, end_node):
         pt_s = graph.nodes[start_node]['o'].tolist()
         pt_e = graph.nodes[end_node]['o'].tolist()
         dwg.add(dwg.polyline(
@@ -506,21 +526,27 @@ def export_routed_graph_svg(graph, route, file_name, include_invalid_path=False)
     for i in range(len(route) - 1):
         start_node, end_node = route[i], route[i + 1]
 
+        # Draw self-loop edges
         if (start_node, start_node) in graph.edges():
-            handle_edge(start_node, start_node, 'red')
+            draw_edge(dwg, graph, start_node, start_node, 'red')
             last_end_node = start_node
 
+        # Draw the other edges
         if (start_node, end_node) in graph.edges():
-            handle_edge(start_node, end_node, 'black')
+            draw_edge(dwg, graph, start_node, end_node, 'black')
             last_end_node = end_node
 
+        # Draw path between edge and the next edge
         if include_invalid_path and last_end_node != end_node:
-            handle_invalid_path(last_end_node, end_node)
+            draw_invalid_path(last_end_node, end_node)
 
-    dwg.save()
-    print(f"saved: {file_name}")
-
-
+    try:
+        dwg.save()
+        print(f"saved: {file_name}")
+    except Exception as e:
+        print('Error saving file:', e)
+    finally:
+        del dwg
 
 
 def main():
