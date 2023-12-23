@@ -447,8 +447,7 @@ def draw_graph(graph: nx.MultiGraph, colors: list[str],
 """
 SVG file Generator
 """
-# without invalid path
-def draw_svg(graph, colors, save_dir, save_name):
+def export_graph_svg(graph, colors, save_dir, save_name):
     outfile_name = os.path.join(save_dir, save_name + '.svg')
     dwg = svgwrite.Drawing(outfile_name, profile='tiny')
 
@@ -476,80 +475,51 @@ def draw_svg(graph, colors, save_dir, save_name):
     finally:
         del dwg
 
-
-# with invalid path
-def add_polyline_to_dwg(dwg, points, stroke_color, stroke_width=1, fill_color='none'):
-    dwg.add(dwg.polyline(
-        points=points,
-        stroke=stroke_color,
-        stroke_width=stroke_width,
-        fill=fill_color,
-        id='id_'
-    ))
+def export_routed_graph_svg(graph, route, file_name, include_invalid_path=False):
+    """Generate an SVG file from a given graph and route."""
     
-def generate_svg(graph, route, file_name, invalid_path=False):
-    dwg = svgwrite.Drawing(file_name, profile='tiny')
+    def handle_edge(start_node, end_node, stroke_color):
+        """Handle drawing an edge or self-loop."""
+        for edge_data in graph[start_node][end_node].values():
+            polyline_points = edge_data['pts'].tolist()
+            dwg.add(dwg.polyline(
+                points=polyline_points,
+                stroke=stroke_color,
+                stroke_width=1,
+                fill='none'
+            ))
 
-    last_start_node = route[0]
+    def handle_invalid_path(start_node, end_node):
+        """Handle drawing an invalid path."""
+        pt_s = graph.nodes[start_node]['o'].tolist()
+        pt_e = graph.nodes[end_node]['o'].tolist()
+        dwg.add(dwg.polyline(
+            points=[pt_s, pt_e],
+            stroke='gray',
+            stroke_width=0.5,
+            fill='none'
+        ))
+
+    dwg = svgwrite.Drawing(file_name, profile='tiny')
     last_end_node = route[0]
-    invalid_start_node = route[0]
-    draw_flag = False
     
     for i in range(len(route) - 1):
-        print(f"route:{i}, {route[i]}")
         start_node, end_node = route[i], route[i + 1]
-        self_loop = (start_node, start_node) in graph.edges()
-        edge_exists = (start_node, end_node) in graph.edges()
 
-        if self_loop:
-            print(f"Self loop at {start_node}")
-            draw_flag = True
+        if (start_node, start_node) in graph.edges():
+            handle_edge(start_node, start_node, 'red')
             last_end_node = start_node
-            stroke_color = 'red'
 
-            pt_s = graph.nodes[start_node]['o'].tolist()
-            for g in graph[start_node][start_node].values():
-                draw_points = g['pts'].tolist()
-                add_polyline_to_dwg(dwg, draw_points, stroke_color)
-        else:
-            draw_flag = False
-            invalid_start_node = last_end_node
-
-        if edge_exists:
-            print(f"{start_node}, {end_node} exists")
-            draw_flag = True
-            last_start_node = start_node
+        if (start_node, end_node) in graph.edges():
+            handle_edge(start_node, end_node, 'black')
             last_end_node = end_node
 
-            pt_s = graph.nodes[start_node]['o'].tolist()
-            pt_e = graph.nodes[end_node]['o'].tolist()
-            stroke_color = 'black'
+        if include_invalid_path and last_end_node != end_node:
+            handle_invalid_path(last_end_node, end_node)
 
-            for g in graph[start_node][end_node].values():
-                draw_points = g['pts'].tolist()
-                
-                # ポリゴンラインで生成する場合
-                add_polyline_to_dwg(dwg, draw_points, stroke_color)
-                #print(f"draw: {start_node}, {end_node}")
-
-        else:
-            draw_flag = False
-            invalid_start_node = last_end_node
-        
-        if invalid_path and draw_flag:
-            draw_flag = False
-            
-            pt_s = graph.nodes[invalid_start_node]['o'].tolist()
-            pt_e = graph.nodes[last_start_node]['o'].tolist()
-            
-            draw_points = [pt_s] + [pt_e]
-            
-            # ポリゴンラインで生成する場合
-            add_polyline_to_dwg(dwg, draw_points, 'gray', stroke_width=0.5)
-            #print(f"invalid: {invalid_start_node}, {last_start_node}")
     dwg.save()
     print(f"saved: {file_name}")
-    del dwg
+
 
 
 
@@ -589,8 +559,8 @@ def main():
     print(f"Graph information before optimizing: {combined_graph}")
 
     save_dir_svg = './out/'
-    draw_svg(combined_graph, colors, save_dir_svg, image_name + '_combined')
-    draw_svg(combined_graph, ['black'], save_dir_svg, image_name + '_combined' + '_black')
+    export_graph_svg(combined_graph, colors, save_dir_svg, image_name + '_combined')
+    export_graph_svg(combined_graph, ['black'], save_dir_svg, image_name + '_combined' + '_black')
 
     # remove unused node and remap nodes
     graph_removed_isolates = remove_isolates(combined_graph)
@@ -622,8 +592,8 @@ def main():
     print("Optimizing path (Solving TSP) has finished.")
 
     # export optimized path as svg files
-    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
-    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path_invalid.svg', invalid_path=True)
+    export_routed_graph_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
+    export_routed_graph_svg(remapped_graph, route, './out/' + image_name + '_optimized_path_invalid.svg', include_invalid_path=True)
 
     print("completed")
 
