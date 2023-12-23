@@ -298,7 +298,10 @@ def remove_isolates(graph: nx.MultiGraph) -> nx.MultiGraph:
     return remove_isolates_graph
 
 
-def remap_node_ids(graph):
+def remap_node_ids(graph: nx.MultiGraph) -> nx.MultiGraph:
+    """
+    Relabels the node IDs of a MultiGraph to be a sequence of integers starting at 0.
+    """
     mapping = {old_id: new_id for new_id, old_id in enumerate(graph.nodes())}
     return nx.relabel_nodes(graph, mapping)
 
