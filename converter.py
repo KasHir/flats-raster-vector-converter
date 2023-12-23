@@ -409,60 +409,84 @@ def calculate_optimized_route(
 
   
 """
-PNG file Generator
+Export PNG file function
 """
-def draw_graph(graph, colors, save_dir, img_size, save_name):#, img_size):
+def export_graph_png(graph: nx.MultiGraph, colors: list[str],
+                save_dir: str, img_size: tuple[int, int], save_name: str):
+    """
+    Draws a graph and saves it as a PNG file.
 
-    # グラフ描画サイズを元の画像のアスペクト比に合わせる
+    Args:
+        graph (nx.MultiGraph): The graph to be drawn.
+        colors (list[str]): A list of colors for drawing different edges.
+        save_dir (str): Directory where the image will be saved.
+        img_size (tuple[int, int]): Size of the image (width, height).
+        save_name (str): Name of the saved file.
+    """
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+        
+    # Adjust the graph drawing size to match the aspect ratio of the original image
     aspect_ratio = img_size[0] / img_size[1]
     fig_size = (10.0 * aspect_ratio, 10.0)
     plt.rcParams['figure.figsize'] = fig_size
     
-    # グラフ描画のための設定
-    color_index = 0
-    
-    # draw edges by pts
-    for s, e in graph.edges():
+    # Draw edges
+    for color_index, (s, e) in enumerate(graph.edges()):
         current_color = colors[color_index % len(colors)]
         
-        for edge_key, edge_data in graph[s][e].items():
-            pts = edge_data['pts'].tolist()
-            pt_all = pts
-            
-            pt_all_np = np.array(pt_all)
+        for edge_data in graph[s][e].values():
+            pts = np.array(edge_data['pts'])
+            plt.plot(pts[:, 0], pts[:, 1], current_color)
 
-            plt.plot(pt_all_np[:, 0], pt_all_np[:, 1], current_color)
-            #print(f"{s}, {e}, {edge_key}, {current_color}") 
-        color_index += 1
-
-    # グラフをファイルに保存
-    plt.savefig(os.path.join(save_dir, save_name + '_graph.png'))
+    # Save the graph to a file
+    plt.savefig(os.path.join(save_dir, f"{save_name}_graph.png"))
     plt.close()
 
+
 """
-SVG file Generator
+Export SVG file functions
 """
-# without invalid path
-def draw_svg(graph, colors, save_dir, save_name):
-    outfile_name = os.path.join(save_dir, save_name + '.svg')
+def draw_edge(dwg: svgwrite.Drawing, graph: nx.MultiGraph, 
+              start_node: int, end_node: int, 
+              stroke_color: str, stroke_width: float = 0.8) -> None:
+    """
+    Draws an edge between two nodes on the SVG drawing.
+    
+    This function iterates over all the data associated with the edge between the specified
+    start and end nodes, extracts the polyline points, and adds them to the SVG drawing.
+    """
+    for edge_data in graph[start_node][end_node].values():
+        polyline_points = edge_data['pts'].tolist()
+        dwg.add(dwg.polyline(
+            points=polyline_points,
+            stroke=stroke_color,
+            stroke_width=stroke_width,
+            fill='none'
+        ))
+
+def export_graph_svg(graph: nx.MultiGraph, colors: list[str], 
+                     save_dir: str, save_name: str) -> None:
+    """
+    Exports an SVG file of the graph without a specific route.
+
+    Args:
+        graph (nx.MultiGraph): The graph to be exported.
+        colors (list[str]): A list of colors used for different edges in the graph.
+        save_dir (str): The directory where the SVG file will be saved.
+        save_name (str): The name of the SVG file to be saved.
+
+    This function iterates through each edge in the graph and draws it using the specified colors.
+    It saves the resulting SVG to the specified directory.
+    """
+
+    outfile_name = os.path.join(save_dir, f"{save_name}.svg")
     dwg = svgwrite.Drawing(outfile_name, profile='tiny')
 
-    color_index = 0
+    for color_index, (s, e) in enumerate(graph.edges()):
+        current_color = colors[color_index % len(colors)]
+        draw_edge(dwg, graph, s, e, current_color)
 
-    for s, e in graph.edges():
-
-        for edge_key, edge_data in graph[s][e].items():
-            pts = edge_data['pts'].tolist()
-            current_color = colors[color_index % len(colors)]
-            
-            dwg.add(dwg.polyline(points=pts,
-                                 stroke=current_color,
-                                 stroke_width=0.8,
-                                 fill='none',
-                                 id=f"{s}_{e}_{edge_key}"
-                                ))
-            color_index += 1
-    
     try:
         dwg.save()
         print('Saved:', outfile_name)
@@ -471,156 +495,127 @@ def draw_svg(graph, colors, save_dir, save_name):
     finally:
         del dwg
 
+def export_routed_graph_svg(graph: nx.MultiGraph, route: list[int], 
+                            file_name: str, include_invalid_path: bool = False) -> None:
+    """
+    Exports an SVG file representing a routed graph.
 
-# with invalid path
-def add_polyline_to_dwg(dwg, points, stroke_color, stroke_width=1, fill_color='none'):
-    dwg.add(dwg.polyline(
-        points=points,
-        stroke=stroke_color,
-        stroke_width=stroke_width,
-        fill=fill_color,
-        id='id_'
-    ))
-    
-def generate_svg(graph, route, file_name, invalid_path=False):
+    Args:
+        graph (nx.MultiGraph): The graph from which the SVG is generated.
+        route (list[int]): A list of node IDs representing the route to be highlighted.
+        file_name (str): The name of the SVG file to be saved.
+        include_invalid_path (bool, optional): If True, invalid paths (paths not present in the graph) are drawn. Defaults to False.
+
+    This function draws each edge in the route on the SVG. If `include_invalid_path` is True, 
+    it also draws lines between non-sequential nodes in the route, marking these as invalid paths.
+    """
+
+    def draw_invalid_path(start_node, end_node):
+        pt_s = graph.nodes[start_node]['o'].tolist()
+        pt_e = graph.nodes[end_node]['o'].tolist()
+        dwg.add(dwg.polyline(
+            points=[pt_s, pt_e],
+            stroke='gray',
+            stroke_width=0.5,
+            fill='none'
+        ))
+
     dwg = svgwrite.Drawing(file_name, profile='tiny')
-
-    last_start_node = route[0]
     last_end_node = route[0]
-    invalid_start_node = route[0]
-    draw_flag = False
     
     for i in range(len(route) - 1):
-        print(f"route:{i}, {route[i]}")
         start_node, end_node = route[i], route[i + 1]
-        self_loop = (start_node, start_node) in graph.edges()
-        edge_exists = (start_node, end_node) in graph.edges()
 
-        if self_loop:
-            print(f"Self loop at {start_node}")
-            draw_flag = True
+        # Draw self-loop edges
+        if (start_node, start_node) in graph.edges():
+            draw_edge(dwg, graph, start_node, start_node, 'red')
             last_end_node = start_node
-            stroke_color = 'red'
 
-            pt_s = graph.nodes[start_node]['o'].tolist()
-            for g in graph[start_node][start_node].values():
-                draw_points = g['pts'].tolist()
-                add_polyline_to_dwg(dwg, draw_points, stroke_color)
-        else:
-            draw_flag = False
-            invalid_start_node = last_end_node
-
-        if edge_exists:
-            print(f"{start_node}, {end_node} exists")
-            draw_flag = True
-            last_start_node = start_node
+        # Draw the other edges
+        if (start_node, end_node) in graph.edges():
+            draw_edge(dwg, graph, start_node, end_node, 'black')
             last_end_node = end_node
 
-            pt_s = graph.nodes[start_node]['o'].tolist()
-            pt_e = graph.nodes[end_node]['o'].tolist()
-            stroke_color = 'black'
+        # Draw path between edge and the next edge
+        if include_invalid_path and last_end_node != end_node:
+            draw_invalid_path(last_end_node, end_node)
 
-            for g in graph[start_node][end_node].values():
-                draw_points = g['pts'].tolist()
-                
-                # ポリゴンラインで生成する場合
-                add_polyline_to_dwg(dwg, draw_points, stroke_color)
-                #print(f"draw: {start_node}, {end_node}")
+    try:
+        dwg.save()
+        print(f"saved: {file_name}")
+    except Exception as e:
+        print('Error saving file:', e)
+    finally:
+        del dwg
 
-        else:
-            draw_flag = False
-            invalid_start_node = last_end_node
-        
-        if invalid_path and draw_flag:
-            draw_flag = False
-            
-            pt_s = graph.nodes[invalid_start_node]['o'].tolist()
-            pt_e = graph.nodes[last_start_node]['o'].tolist()
-            
-            draw_points = [pt_s] + [pt_e]
-            
-            # ポリゴンラインで生成する場合
-            add_polyline_to_dwg(dwg, draw_points, 'gray', stroke_width=0.5)
-            #print(f"invalid: {invalid_start_node}, {last_start_node}")
-    dwg.save()
-    print(f"saved: {file_name}")
-    del dwg
 
+
+"""
+Functions for using the Main()
+"""
+def show_graph_info(graph):
+    isolates = nx.number_of_isolates(graph)
+    print(f"Number of isolated nodes: {isolates}")
+    print(f"Graph information: {graph}")
+
+
+def optimize_graph(graph, output_dir, image_name, img_size, colors):
+    """
+    To optimizes the graph by combining similar edges, 
+    which simplifies the graph structure and improves processing efficiency.
+    """
+    print("Optimizing graph starts.")
+    combined_graph = combine_edges(graph)
+    export_graph_png(combined_graph, colors, output_dir, img_size, image_name + '_combined')
+    export_graph_svg(combined_graph, colors, output_dir, image_name + '_combined')
+    export_graph_svg(combined_graph, ['black'], output_dir, image_name + '_combined_black')
+    
+    print("Graph info Before optimization")
+    show_graph_info(combined_graph)
+
+    graph_removed_isolates = remove_isolates(combined_graph)
+    print("Graph info After optimization")
+    show_graph_info(graph_removed_isolates)
+    return remap_node_ids(graph_removed_isolates)
+
+
+def optimize_path(graph, output_dir, image_name):
+    """
+    To solve the Traveling Salesman Problem (TSP) to find the most efficient path.
+    It includes benchmarking to measure the performance of the optimization process.
+    """
+    print("Optimizing path (Solving TSP) starts.")
+    start_time = time.time()
+    distance_matrix = create_distance_matrix(graph)
+    print(f"Create distance_matrix took {time.time() - start_time} seconds.")
+    start_time = time.time()
+    route = calculate_optimized_route(distance_matrix, graph)
+    print(f"TSP solving took {time.time() - start_time} seconds.")
+    export_routed_graph_svg(graph, route, f'{output_dir}/{image_name}_optimized_path.svg')
+    export_routed_graph_svg(graph, route, f'{output_dir}/{image_name}_optimized_path_invalid.svg', include_invalid_path=True)
 
 
 def main():
     print("flats-raster-vector-converter is running")
 
+    # Configurable parameters
     colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'black']
-
-    # Set file names and paths
     image_name = 'zunda'
     input_file_path = f"./img_line/{image_name}.png"
     output_dir = "./out/"
 
+    # Image processing
     processed_image, data, img_size = process_image(input_file_path, output_dir)
-
     graph = create_skeltonize_graph(processed_image)
+    export_graph_png(graph, colors, output_dir, img_size, image_name + '_raw')
 
-    draw_graph(graph, colors, output_dir, img_size, image_name + '_raw')
+    # Graph optimization
+    optimized_graph = optimize_graph(graph, output_dir, image_name, img_size, colors)
 
+    # Path optimization
+    optimize_path(optimized_graph, output_dir, image_name)
 
-    """
-    Graph Optimization
-    This section optimizes the graph by combining similar edges, which simplifies the graph structure and improves processing efficiency.
-    """
-
-    print("Optimizing graph starts.")
-
-    # Combine Lines of Graph
-    combined_graph = combine_edges(graph)
-
-    save_dir2 = './out/'
-    draw_graph(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
-
-    # show graph information
-    isolates = nx.number_of_isolates(combined_graph)
-    print(f"Number of isolated nodes: {isolates}")
-    print(f"Graph information before optimizing: {combined_graph}")
-
-    save_dir_svg = './out/'
-    draw_svg(combined_graph, colors, save_dir_svg, image_name + '_combined')
-    draw_svg(combined_graph, ['black'], save_dir_svg, image_name + '_combined' + '_black')
-
-    # remove unused node and remap nodes
-    graph_removed_isolates = remove_isolates(combined_graph)
-    remapped_graph = remap_node_ids(graph_removed_isolates)
-
-    print("Optimizing graph has finished.")
-    print(f"Graph information after optimizing: {remapped_graph}")
-    
-
-    """
-    Path Optimization with Benchmark
-    This section involves solving the Traveling Salesman Problem (TSP) to find the most efficient path.
-    It includes benchmarking to measure the performance of the optimization process.
-    """
-    print("Optimizing path (Solving TSP) starts.")
-
-    # oprimizing root by OR-Tools TSP solver
-    start_time = time.time()
-
-    distance_matrix = create_distance_matrix(remapped_graph)
-    end_time = time.time()
-    print(f"Create distance_matrix: {end_time - start_time} seconds.")
-
-    route = calculate_optimized_route(distance_matrix, remapped_graph)
-
-    end_time = time.time()
-    print(f"Process edges took {end_time - start_time} seconds.")
-    
-    print("Optimizing path (Solving TSP) has finished.")
-
-    # export optimized path as svg files
-    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
-    generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path_invalid.svg', invalid_path=True)
-
-    print("completed")
+    print("Completed")
 
 
 if __name__ == "__main__":
