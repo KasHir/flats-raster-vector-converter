@@ -310,102 +310,102 @@ def remap_node_ids(graph: nx.MultiGraph) -> nx.MultiGraph:
 Path Optimization by OR-Tools TSP solver
 """
 
-# 1. ポイント間の距離行列の作成
-def create_distance_matrix(graph):
-    # ノードIDを使用してポイントのリストを作成
-    points = {n: graph.nodes[n]['o'].tolist() for n in graph.nodes}
+def create_distance_matrix(graph: nx.MultiGraph) -> dict[int, dict[int, int]]:
+    """
+    Creates a distance matrix for nodes, primarily for use with the OR-Tools TSP solver.
+
+    Args:
+        graph (nx.MultiGraph): The graph to compute distances for.
+
+    Returns:
+        dict[int, dict[int, int]]: A dictionary where each node ID maps to another dictionary, 
+                                   containing distances to other nodes. Distances are represented as integers.
+    """
+    node_positions = {n: graph.nodes[n]['o'].tolist() for n in graph.nodes}
     distance_matrix = {}
     
-    for i, point_i in points.items():
-        distances = {}
-        for j, point_j in points.items():
-            if i != j:
-                # ユークリッド距離を計算
-                distances[j] = int(np.linalg.norm(np.array(point_i) - np.array(point_j)))
-            else:
-                distances[j] = 0
-        distance_matrix[i] = distances
-        
-    return distance_matrix, points
+    # Calculate the Euclidean distance between each pair of nodes
+    for i, pos_i in node_positions.items():
+        distance_matrix[i] = {
+            j: int(np.linalg.norm(np.array(pos_i) - np.array(pos_j)))
+            for j, pos_j in node_positions.items() if i != j
+        }
+        distance_matrix[i][i] = 0
 
-# 2. OR-Toolsを使用して最短ルートを計算
-def calculate_optimized_route(distance_matrix, graph):
-    start_node = list(graph.nodes())[0] # graphの中にあるいずれかのnodeを始点とする
-    print(f"start_node: {start_node}")
-    
-    # ノードの数を取得
+    return distance_matrix
+
+
+def calculate_optimized_route(
+        distance_matrix: dict[int, dict[int, int]], graph: nx.MultiGraph, verbose: bool = False
+        ) -> list[int]:
+    """
+    Calculates the optimized route for a given graph using the OR-Tools TSP solver.
+
+    Args:
+        distance_matrix (dict[int, dict[int, int]]): A dictionary of dictionaries containing the distances between nodes.
+        graph (nx.MultiGraph): The graph representing the nodes and their connections.
+        verbose (bool): If True, additional details will be printed to the console.
+
+    Returns:
+        list[int]: A list of node IDs representing the optimized route.
+    """
+    start_node = list(graph.nodes())[0]
     num_nodes = len(distance_matrix)
-    print(f"num_nodes: {num_nodes}")
+    if verbose:
+        print(f"start_node: {start_node}")
+        print(f"num_nodes: {num_nodes}")
     
+    # Create the routing index manager
     manager = pywrapcp.RoutingIndexManager(num_nodes, 1, start_node)
+
+    # Create Routing Model
     routing = pywrapcp.RoutingModel(manager)
 
-    
     def distance_callback(from_index, to_index):
+        """Returns the distance between the two nodes."""
+        # Convert from routing variable Index to distance matrix NodeIndex
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
-
-        # 距離の計算
         distance = distance_matrix[from_node][to_node]
-    
-        # デバッグ情報の出力
-        #print(f"Distance from node {from_node} to node {to_node}: {distance}")
-        
         return distance
 
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    # OR-Tools の制約をノードIDに基づいて設定
+    # Apply edge constraints: start and end nodes of the edges are fixed as routes
     for (s, e) in graph.edges():
         if s != e:
             routing.solver().Add(
                 routing.NextVar(manager.NodeToIndex(s)) == manager.NodeToIndex(e))
           
-    # パラメータ設定
+    # Setting first solution strategy
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = (
         routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
-    
-    def print_solution(manager, routing, solution):
-        """Prints solution on console."""
-        print(f"Objective: {solution.ObjectiveValue()} miles")
-        index = routing.Start(0)
-        plan_output = "Route for vehicle 0:\n"
-        route_distance = 0
-        while not routing.IsEnd(index):
-            plan_output += f" {manager.IndexToNode(index)} ->"
-            previous_index = index
-            index = solution.Value(routing.NextVar(index))
-            route_distance += routing.GetArcCostForVehicle(previous_index, index, 0)
-        plan_output += f" {manager.IndexToNode(index)}\n"
-        print(plan_output)
-        plan_output += f"Route distance: {route_distance}miles\n"
-    
-    
-    # 解の計算
-    solution = routing.SolveWithParameters(search_parameters)
-    if solution:
-        print_solution(manager, routing, solution)
 
-    
-    # ルートの取得
+    # Solve and handle potential errors
+    solution = routing.SolveWithParameters(search_parameters)
+    if not solution:
+        raise Exception("No solution found by the solver.")
+
+    # Get the optimized route as list and print the solution
     index = routing.Start(0)
     total_distance = 0
-    route = []
-    route.append(start_node)
+    route = [start_node]
+    plan_output = "Route for vehicle 0:\n"
+
     while not routing.IsEnd(index):
+        plan_output += f" {manager.IndexToNode(index)} ->"
         previous_index = index
         index = solution.Value(routing.NextVar(index))
-        
         route_distance = routing.GetArcCostForVehicle(previous_index, index, 0)
         route.append(manager.IndexToNode(index))
         total_distance += route_distance
-        
-    print('Total distance of the route: {}'.format(total_distance))    
-    return route
-    
 
+    plan_output += f" {manager.IndexToNode(index)}\nTotal distance: {total_distance} pixels\n"
+    print(plan_output)
+
+    return route
 
   
 """
@@ -605,16 +605,16 @@ def main():
     # oprimizing root by OR-Tools TSP solver
     start_time = time.time()
 
-    distance_matrix, points = create_distance_matrix(remapped_graph)
+    distance_matrix = create_distance_matrix(remapped_graph)
+    end_time = time.time()
+    print(f"Create distance_matrix: {end_time - start_time} seconds.")
+
     route = calculate_optimized_route(distance_matrix, remapped_graph)
 
     end_time = time.time()
     print(f"Process edges took {end_time - start_time} seconds.")
     
     print("Optimizing path (Solving TSP) has finished.")
-
-    # show optimized route
-    print(route)
 
     # export optimized path as svg files
     generate_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
