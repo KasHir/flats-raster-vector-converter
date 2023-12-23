@@ -411,33 +411,38 @@ def calculate_optimized_route(
 """
 PNG file Generator
 """
-def draw_graph(graph, colors, save_dir, img_size, save_name):#, img_size):
+def draw_graph(graph: nx.MultiGraph, colors: list[str],
+                save_dir: str, img_size: tuple[int, int], save_name: str):
+    """
+    Draws a graph and saves it as a PNG file.
 
-    # グラフ描画サイズを元の画像のアスペクト比に合わせる
+    Args:
+        graph (nx.MultiGraph): The graph to be drawn.
+        colors (list[str]): A list of colors for drawing different edges.
+        save_dir (str): Directory where the image will be saved.
+        img_size (tuple[int, int]): Size of the image (width, height).
+        save_name (str): Name of the saved file.
+    """
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+        
+    # Adjust the graph drawing size to match the aspect ratio of the original image
     aspect_ratio = img_size[0] / img_size[1]
     fig_size = (10.0 * aspect_ratio, 10.0)
     plt.rcParams['figure.figsize'] = fig_size
     
-    # グラフ描画のための設定
-    color_index = 0
-    
-    # draw edges by pts
-    for s, e in graph.edges():
+    # Draw edges
+    for color_index, (s, e) in enumerate(graph.edges()):
         current_color = colors[color_index % len(colors)]
         
-        for edge_key, edge_data in graph[s][e].items():
-            pts = edge_data['pts'].tolist()
-            pt_all = pts
-            
-            pt_all_np = np.array(pt_all)
+        for edge_data in graph[s][e].values():
+            pts = np.array(edge_data['pts'])
+            plt.plot(pts[:, 0], pts[:, 1], current_color)
 
-            plt.plot(pt_all_np[:, 0], pt_all_np[:, 1], current_color)
-            #print(f"{s}, {e}, {edge_key}, {current_color}") 
-        color_index += 1
-
-    # グラフをファイルに保存
-    plt.savefig(os.path.join(save_dir, save_name + '_graph.png'))
+    # Save the graph to a file
+    plt.savefig(os.path.join(save_dir, f"{save_name}_graph.png"))
     plt.close()
+
 
 """
 SVG file Generator
