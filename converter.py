@@ -291,15 +291,6 @@ def combine_edges(graph):
     return combined_graph
 
 
-def number_of_isolates(graph):
-    isolate_count = 0
-    for node in graph.nodes():
-        if graph.degree(node) == 0:
-            isolate_count += 1
-    return isolate_count
-
-
-
 def remove_isolates(graph):
     remove_isolates_graph = nx.MultiGraph(graph)
     isolates = [node for node in remove_isolates_graph.nodes() if remove_isolates_graph.degree(node) == 0]
@@ -585,8 +576,8 @@ def main():
     draw_graph(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
 
     # show graph information
-    #isolates = number_of_isolates(combined_graph)
-    #print(f"Number of isolated nodes: {isolates}")
+    isolates = nx.number_of_isolates(combined_graph)
+    print(f"Number of isolated nodes: {isolates}")
     print(f"Graph information before optimizing: {combined_graph}")
 
     save_dir_svg = './out/'
