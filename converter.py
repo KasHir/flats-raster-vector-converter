@@ -291,12 +291,12 @@ def combine_edges(graph):
     return combined_graph
 
 
-def remove_isolates(graph):
+def remove_isolates(graph: nx.MultiGraph) -> nx.MultiGraph:
     remove_isolates_graph = nx.MultiGraph(graph)
-    isolates = [node for node in remove_isolates_graph.nodes() if remove_isolates_graph.degree(node) == 0]
-    for node in isolates:
-        remove_isolates_graph.remove_node(node)
+    isolates = list(nx.isolates(remove_isolates_graph))
+    remove_isolates_graph.remove_nodes_from(isolates)
     return remove_isolates_graph
+
 
 def remap_node_ids(graph):
     mapping = {old_id: new_id for new_id, old_id in enumerate(graph.nodes())}
