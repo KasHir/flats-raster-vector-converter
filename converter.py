@@ -549,79 +549,73 @@ def export_routed_graph_svg(graph: nx.MultiGraph, route: list[int],
         del dwg
 
 
+
+"""
+Functions for using the Main()
+"""
+def show_graph_info(graph):
+    isolates = nx.number_of_isolates(graph)
+    print(f"Number of isolated nodes: {isolates}")
+    print(f"Graph information: {graph}")
+
+
+def optimize_graph(graph, output_dir, image_name, img_size, colors):
+    """
+    To optimizes the graph by combining similar edges, 
+    which simplifies the graph structure and improves processing efficiency.
+    """
+    print("Optimizing graph starts.")
+    combined_graph = combine_edges(graph)
+    export_graph_png(combined_graph, colors, output_dir, img_size, image_name + '_combined')
+    export_graph_svg(combined_graph, colors, output_dir, image_name + '_combined')
+    export_graph_svg(combined_graph, ['black'], output_dir, image_name + '_combined_black')
+    
+    print("Graph info Before optimization")
+    show_graph_info(combined_graph)
+
+    graph_removed_isolates = remove_isolates(combined_graph)
+    print("Graph info After optimization")
+    show_graph_info(graph_removed_isolates)
+    return remap_node_ids(graph_removed_isolates)
+
+
+def optimize_path(graph, output_dir, image_name):
+    """
+    To solve the Traveling Salesman Problem (TSP) to find the most efficient path.
+    It includes benchmarking to measure the performance of the optimization process.
+    """
+    print("Optimizing path (Solving TSP) starts.")
+    start_time = time.time()
+    distance_matrix = create_distance_matrix(graph)
+    print(f"Create distance_matrix took {time.time() - start_time} seconds.")
+    start_time = time.time()
+    route = calculate_optimized_route(distance_matrix, graph)
+    print(f"TSP solving took {time.time() - start_time} seconds.")
+    export_routed_graph_svg(graph, route, f'{output_dir}/{image_name}_optimized_path.svg')
+    export_routed_graph_svg(graph, route, f'{output_dir}/{image_name}_optimized_path_invalid.svg', include_invalid_path=True)
+
+
 def main():
     print("flats-raster-vector-converter is running")
 
+    # Configurable parameters
     colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'black']
-
-    # Set file names and paths
     image_name = 'zunda'
     input_file_path = f"./img_line/{image_name}.png"
     output_dir = "./out/"
 
+    # Image processing
     processed_image, data, img_size = process_image(input_file_path, output_dir)
-
     graph = create_skeltonize_graph(processed_image)
-
     export_graph_png(graph, colors, output_dir, img_size, image_name + '_raw')
 
+    # Graph optimization
+    optimized_graph = optimize_graph(graph, output_dir, image_name, img_size, colors)
 
-    """
-    Graph Optimization
-    This section optimizes the graph by combining similar edges, which simplifies the graph structure and improves processing efficiency.
-    """
+    # Path optimization
+    optimize_path(optimized_graph, output_dir, image_name)
 
-    print("Optimizing graph starts.")
-
-    # Combine Lines of Graph
-    combined_graph = combine_edges(graph)
-
-    save_dir2 = './out/'
-    export_graph_png(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
-
-    # show graph information
-    isolates = nx.number_of_isolates(combined_graph)
-    print(f"Number of isolated nodes: {isolates}")
-    print(f"Graph information before optimizing: {combined_graph}")
-
-    save_dir_svg = './out/'
-    export_graph_svg(combined_graph, colors, save_dir_svg, image_name + '_combined')
-    export_graph_svg(combined_graph, ['black'], save_dir_svg, image_name + '_combined' + '_black')
-
-    # remove unused node and remap nodes
-    graph_removed_isolates = remove_isolates(combined_graph)
-    remapped_graph = remap_node_ids(graph_removed_isolates)
-
-    print("Optimizing graph has finished.")
-    print(f"Graph information after optimizing: {remapped_graph}")
-    
-
-    """
-    Path Optimization with Benchmark
-    This section involves solving the Traveling Salesman Problem (TSP) to find the most efficient path.
-    It includes benchmarking to measure the performance of the optimization process.
-    """
-    print("Optimizing path (Solving TSP) starts.")
-
-    # oprimizing root by OR-Tools TSP solver
-    start_time = time.time()
-
-    distance_matrix = create_distance_matrix(remapped_graph)
-    end_time = time.time()
-    print(f"Create distance_matrix: {end_time - start_time} seconds.")
-
-    route = calculate_optimized_route(distance_matrix, remapped_graph)
-
-    end_time = time.time()
-    print(f"Process edges took {end_time - start_time} seconds.")
-    
-    print("Optimizing path (Solving TSP) has finished.")
-
-    # export optimized path as svg files
-    export_routed_graph_svg(remapped_graph, route, './out/' + image_name + '_optimized_path.svg')
-    export_routed_graph_svg(remapped_graph, route, './out/' + image_name + '_optimized_path_invalid.svg', include_invalid_path=True)
-
-    print("completed")
+    print("Completed")
 
 
 if __name__ == "__main__":
