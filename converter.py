@@ -291,23 +291,17 @@ def combine_edges(graph):
     return combined_graph
 
 
-def number_of_isolates(graph):
-    isolate_count = 0
-    for node in graph.nodes():
-        if graph.degree(node) == 0:
-            isolate_count += 1
-    return isolate_count
-
-
-
-def remove_isolates(graph):
+def remove_isolates(graph: nx.MultiGraph) -> nx.MultiGraph:
     remove_isolates_graph = nx.MultiGraph(graph)
-    isolates = [node for node in remove_isolates_graph.nodes() if remove_isolates_graph.degree(node) == 0]
-    for node in isolates:
-        remove_isolates_graph.remove_node(node)
+    isolates = list(nx.isolates(remove_isolates_graph))
+    remove_isolates_graph.remove_nodes_from(isolates)
     return remove_isolates_graph
 
-def remap_node_ids(graph):
+
+def remap_node_ids(graph: nx.MultiGraph) -> nx.MultiGraph:
+    """
+    Relabels the node IDs of a MultiGraph to be a sequence of integers starting at 0.
+    """
     mapping = {old_id: new_id for new_id, old_id in enumerate(graph.nodes())}
     return nx.relabel_nodes(graph, mapping)
 
@@ -585,8 +579,8 @@ def main():
     draw_graph(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
 
     # show graph information
-    #isolates = number_of_isolates(combined_graph)
-    #print(f"Number of isolated nodes: {isolates}")
+    isolates = nx.number_of_isolates(combined_graph)
+    print(f"Number of isolated nodes: {isolates}")
     print(f"Graph information before optimizing: {combined_graph}")
 
     save_dir_svg = './out/'
