@@ -411,7 +411,7 @@ def calculate_optimized_route(
 """
 PNG file Generator
 """
-def draw_graph(graph: nx.MultiGraph, colors: list[str],
+def export_graph_png(graph: nx.MultiGraph, colors: list[str],
                 save_dir: str, img_size: tuple[int, int], save_name: str):
     """
     Draws a graph and saves it as a PNG file.
@@ -537,7 +537,7 @@ def main():
 
     graph = create_skeltonize_graph(processed_image)
 
-    draw_graph(graph, colors, output_dir, img_size, image_name + '_raw')
+    export_graph_png(graph, colors, output_dir, img_size, image_name + '_raw')
 
 
     """
@@ -551,7 +551,7 @@ def main():
     combined_graph = combine_edges(graph)
 
     save_dir2 = './out/'
-    draw_graph(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
+    export_graph_png(combined_graph, colors, save_dir2, img_size, image_name + '_combined')
 
     # show graph information
     isolates = nx.number_of_isolates(combined_graph)
