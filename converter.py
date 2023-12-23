@@ -310,23 +310,29 @@ def remap_node_ids(graph: nx.MultiGraph) -> nx.MultiGraph:
 Path Optimization by OR-Tools TSP solver
 """
 
-# 1. ポイント間の距離行列の作成
-def create_distance_matrix(graph):
-    # ノードIDを使用してポイントのリストを作成
-    points = {n: graph.nodes[n]['o'].tolist() for n in graph.nodes}
+def create_distance_matrix(graph: nx.MultiGraph) -> dict[int, dict[int, int]]:
+    """
+    Creates a distance matrix for nodes, primarily for use with the OR-Tools TSP solver.
+
+    Args:
+        graph (nx.MultiGraph): The graph to compute distances for.
+
+    Returns:
+        dict[int, dict[int, int]]: A dictionary where each node ID maps to another dictionary, 
+                                   containing distances to other nodes. Distances are represented as integers.
+    """
+    node_positions = {n: graph.nodes[n]['o'].tolist() for n in graph.nodes}
     distance_matrix = {}
     
-    for i, point_i in points.items():
-        distances = {}
-        for j, point_j in points.items():
-            if i != j:
-                # ユークリッド距離を計算
-                distances[j] = int(np.linalg.norm(np.array(point_i) - np.array(point_j)))
-            else:
-                distances[j] = 0
-        distance_matrix[i] = distances
-        
-    return distance_matrix, points
+    # Calculate the Euclidean distance between each pair of nodes
+    for i, pos_i in node_positions.items():
+        distance_matrix[i] = {
+            j: int(np.linalg.norm(np.array(pos_i) - np.array(pos_j)))
+            for j, pos_j in node_positions.items() if i != j
+        }
+        distance_matrix[i][i] = 0
+
+    return distance_matrix
 
 # 2. OR-Toolsを使用して最短ルートを計算
 def calculate_optimized_route(distance_matrix, graph):
@@ -345,10 +351,7 @@ def calculate_optimized_route(distance_matrix, graph):
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
 
-        # 距離の計算
         distance = distance_matrix[from_node][to_node]
-    
-        # デバッグ情報の出力
         #print(f"Distance from node {from_node} to node {to_node}: {distance}")
         
         return distance
@@ -605,7 +608,10 @@ def main():
     # oprimizing root by OR-Tools TSP solver
     start_time = time.time()
 
-    distance_matrix, points = create_distance_matrix(remapped_graph)
+    distance_matrix = create_distance_matrix(remapped_graph)
+    end_time = time.time()
+    print(f"Create distance_matrix: {end_time - start_time} seconds.")
+
     route = calculate_optimized_route(distance_matrix, remapped_graph)
 
     end_time = time.time()
