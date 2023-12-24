@@ -57,9 +57,17 @@ def process_image(
     return eight_bit_skeleton, thresholded, (width, height)
 
 
+def create_skeltonize_graph(skeletonize_image: np.ndarray) -> nx.MultiGraph:
+    """
+    Builds a multi-graph from a skeletonized image using the sknw library.
 
-def create_skeltonize_graph(skeletonize_image):
-    
+    Args:
+        skeletonize_image (np.ndarray): A binary image where the skeletonized structure
+                                        is represented by non-zero pixels.
+
+    Returns:
+        nx.MultiGraph: A NetworkX multi-graph representation of the skeletonized image.
+    """
     return sknw.build_sknw(skeletonize_image.astype(np.uint32),multi=True)
   
 
