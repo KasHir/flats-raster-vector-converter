@@ -158,3 +158,12 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Example input/output files
+out/*
+!out/sample*
+!out/zunda*
+
+img_line/*
+!img_line/sample*
+!img_line/zunda*
