@@ -13,21 +13,40 @@ Designed for professionals and DIY enthusiasts seeking efficient machining and c
 
 ## Installation and Dependencies
 
-To use the flats-raster-vector-converter, follow these steps:
+To use the flats-raster-vector-converter, ensure you have Python installed on your system. This tool has been tested on Python 3.11.6. Follow these steps:
 
 1. Clone the repository:
-
 ```bash
 git clone https://github.com/KasHir/flats-raster-vector-converter
 ```
 
 2. Navigate to the project directory:
-
 ```bash
 cd flats-raster-vector-converter
 ```
 
-Ensure you have Python installed on your system. This tool has been tested on Python 3.11.6.
+3. Install the required third-party libraries. While requirements.txt is not yet available, you can manually install the necessary libraries using pip or conda. Here are the commands to install each library with pip:
+```bash
+pip install opencv-python-headless matplotlib networkx numpy scikit-image svgwrite
+```
+
+If you prefer to use conda, you can use the following commands:
+```bash
+conda install -c conda-forge opencv matplotlib networkx numpy scikit-image svgwrite
+```
+
+Note: The library sknw may need to be updated manually for the best results. If you encounter issues with skeletonized graphs, download the latest version of sknw and include it in the ./external/sknw directory of this repository.
+
+4. Ensure you have the OR-Tools library installed, which may require a separate installation step:
+
+With pip:
+```bash
+pip install ortools
+```
+
+Or, if you're using conda, refer to the OR-Tools documentation for the specific installation command, as it may vary depending on your operating system and conda configuration.
+
+A requirements.txt file will be provided in the future to simplify this process.
 
 
 ## Example Use
@@ -48,6 +67,13 @@ The ideal input is a line-art style raster image, which can be prepared using im
 - Performance may vary with very large images or complex patterns.
 - requirements.txt will be prepared in the future.
 - [List any other known issues or limitations here]
+
+## Acknowledgments
+
+Special thanks to the creators of the example images used in this project. These images are instrumental for demonstrating the capabilities of the flats-raster-vector-converter:
+
+- img_line/sample.png: [https://elshaddai.jp/freedeta.html]
+- img_line/zunda.png : [https://seiga.nicovideo.jp/seiga/im10788496]
 
 ## Contact
 
