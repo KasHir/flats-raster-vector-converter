@@ -57,9 +57,17 @@ def process_image(
     return eight_bit_skeleton, thresholded, (width, height)
 
 
+def create_skeltonize_graph(skeletonize_image: np.ndarray) -> nx.MultiGraph:
+    """
+    Builds a multi-graph from a skeletonized image using the sknw library.
 
-def create_skeltonize_graph(skeletonize_image):
-    
+    Args:
+        skeletonize_image (np.ndarray): A binary image where the skeletonized structure
+                                        is represented by non-zero pixels.
+
+    Returns:
+        nx.MultiGraph: A NetworkX multi-graph representation of the skeletonized image.
+    """
     return sknw.build_sknw(skeletonize_image.astype(np.uint32),multi=True)
   
 
@@ -571,7 +579,7 @@ def optimize_graph(graph, output_dir, image_name, img_size, colors):
     export_graph_svg(combined_graph, ['black'], output_dir, image_name + '_combined_black')
     
     print("Graph info Before optimization")
-    show_graph_info(combined_graph)
+    show_graph_info(graph)
 
     graph_removed_isolates = remove_isolates(combined_graph)
     print("Graph info After optimization")
@@ -595,18 +603,20 @@ def optimize_path(graph, output_dir, image_name):
     export_routed_graph_svg(graph, route, f'{output_dir}/{image_name}_optimized_path_invalid.svg', include_invalid_path=True)
 
 
-def main():
+def main(input_file_path=None, output_dir=None):
     print("flats-raster-vector-converter is running")
 
     # Configurable parameters
     colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'black']
-    image_name = 'zunda'
-    input_file_path = f"./img_line/{image_name}.png"
-    output_dir = "./out/"
+
+    # Ensure output directory exists
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # Image processing
     processed_image, data, img_size = process_image(input_file_path, output_dir)
     graph = create_skeltonize_graph(processed_image)
+    image_name = os.path.splitext(os.path.basename(input_file_path))[0]  # Extract image name from path
     export_graph_png(graph, colors, output_dir, img_size, image_name + '_raw')
 
     # Graph optimization
@@ -619,4 +629,17 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Default file paths used during testing or if no arguments are provided
+    default_input_file_path = 'img_line/zunda.png'
+    default_output_dir = 'out/'
+
+    # Check if command-line arguments are provided
+    if len(sys.argv) == 3:
+        input_file_path = sys.argv[1]
+        output_dir = sys.argv[2]
+    else:
+        input_file_path = default_input_file_path
+        output_dir = default_output_dir
+        print(f"No command-line arguments provided. Using default paths: {input_file_path}, {output_dir}")
+
+    main(input_file_path, output_dir)
